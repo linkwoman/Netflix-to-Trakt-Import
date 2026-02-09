@@ -1,0 +1,126 @@
+You are working inside this Replit repo. Implement a human-review “queue” output for TMDb matching.
+
+OBJECTIVE
+Produce a single UI-friendly CSV called /home/runner/workspace/review_queue.csv that contains EVERYTHING a human needs to review and resolve any item that is not confidently auto-resolved.
+
+REVIEW THRESHOLD
+Define a constant:
+  REVIEW_THRESHOLD = 0.95
+Anything with confidence < REVIEW_THRESHOLD must be included in review_queue.csv even if it was “resolved”.
+
+DO NOT CHANGE
+- Do not change the matching/search logic.
+- Do not change existing outputs or their meaning (keep resolved.csv, needs_review.csv, skipped.csv intact).
+- Add review_queue.csv as an additional artifact only.
+
+WHAT MUST APPEAR IN review_queue.csv
+review_queue.csv must be ONE ROW PER HUMAN-CHOOSABLE ITEM.
+That means:
+- low-confidence resolved rows => 1 row each
+- ambiguous rows => 1 row per candidate TMDb id
+- skipped rows => do NOT include (unless later explicitly asked)
+
+PROVENANCE (REQUIRED — NO GUESSING)
+review_queue.csv MUST include explicit provenance fields:
+
+Columns (must exist):
+- source_file            (resolved.csv | needs_review.csv | skipped.csv)
+- review_reason          (low_confidence_resolved | ambiguous_candidates | no_match)
+- original_row_id        (stable reference back to the source row; row index is OK)
+- original_confidence    (the model confidence score from the source row)
+
+Rules:
+- From resolved.csv where confidence < REVIEW_THRESHOLD:
+    source_file=resolved.csv
+    review_reason=low_confidence_resolved
+- From needs_review.csv:
+    source_file=needs_review.csv
+    review_reason=ambiguous_candidates
+- Do NOT emit no_match unless we later choose to include skipped rows.
+
+FIELDS REQUIRED FOR HUMAN DECISIONS (UI BUNDLE)
+For every row in review_queue.csv (candidate rows and low-confidence resolved rows), include:
+
+IDENTITY/LINKS
+- input_title
+- input_type             (movie|tv|unknown or your existing labels)
+- confidence             (same as original_confidence; keep both fields anyway)
+- tmdb_id
+- media_type             (movie|tv)
+- tmdb_url               (movie => https://www.themoviedb.org/movie/{id}
+                          tv    => https://www.themoviedb.org/tv/{id})
+
+DISPLAY METADATA
+- poster_path            (do not render images; just provide path)
+- year                   (movie: release_date year; tv: first_air_date year)
+- genres                 (pipe-separated names)
+- stars                  (top 5 cast names, pipe-separated)
+- released_by            (movie: top 2 production_companies; tv: top 1 network)
+- vision_by_label        (movie: "Directed by" ; tv: "Created by")
+- vision_by              (movie: Director name from credits crew job=="Director"
+                          tv: created_by names, comma-separated)
+
+CANDIDATE CONTEXT (ONLY FOR AMBIGUOUS ROWS)
+- candidate_rank         (1..N for candidates; 0 for low-confidence resolved rows)
+- candidate_ids          (the original semicolon-separated candidate list from needs_review.csv; empty for low-confidence resolved)
+
+OUTPUT SCHEMA (EXACT COLUMN ORDER)
+Write review_queue.csv with these columns in this order:
+
+source_file,review_reason,original_row_id,original_confidence,
+input_title,input_type,confidence,status,
+tmdb_id,media_type,tmdb_url,
+year,genres,stars,released_by,vision_by_label,vision_by,poster_path,
+candidate_rank,candidate_ids
+
+Where:
+- status for low-confidence resolved rows: "resolved_low_confidence"
+- status for candidate rows: "candidate"
+
+TMDB FETCHING (MINIMIZE CALLS, DETERMINISTIC)
+For each (media_type, tmdb_id) you need to enrich, fetch TMDb details + credits in ONE request:
+
+- Movie: GET /movie/{id}?append_to_response=credits
+- TV:    GET /tv/{id}?append_to_response=credits
+
+Parse:
+- poster_path (details)
+- genres (details)
+- release_date / first_air_date (details)
+- production_companies (movie details)
+- networks + created_by (tv details)
+- credits.cast (stars)
+- credits.crew Director (movie vision)
+
+CACHING (REQUIRED)
+Implement an in-memory cache dict keyed by (media_type, tmdb_id) so the same ID is never fetched twice in a run.
+
+ERROR HANDLING (REQUIRED)
+If a TMDb enrichment call fails for an item that is in the queue:
+- still emit the row
+- leave metadata fields blank for that item
+- include a short marker in released_by (e.g., "TMDb_fetch_failed") OR add a new column fetch_error
+Choose ONE and implement consistently. (Prefer adding fetch_error column if easy.)
+If you add fetch_error, append it as the LAST column.
+
+RUNTIME/FILE LOCATIONS (REQUIRED)
+- Read/write in /home/runner/workspace/
+- Confirm the CSVs are written there.
+- Ensure paths are not hardcoded to temp directories.
+
+IMPLEMENTATION STEPS
+1) Locate the code that writes resolved.csv, needs_review.csv, skipped.csv.
+2) Add REVIEW_THRESHOLD and identify rows to include:
+   - resolved rows where confidence < REVIEW_THRESHOLD
+   - needs_review rows; expand candidate IDs into one row per candidate
+3) For each queue row, determine media_type and tmdb_id to enrich.
+4) Fetch TMDb details+credits with caching and build the UI fields.
+5) Write review_queue.csv with the exact schema above.
+6) Run the program and print the first ~20 lines of review_queue.csv.
+
+VALIDATION (REQUIRED)
+After running, show me:
+- A low-confidence resolved example row (e.g., Push if present)
+- An ambiguous candidate set expanded into multiple rows (e.g., Glass Onion candidates)
+- Confirm that high-confidence resolved items (>=0.95) do NOT appear in review_queue.csv
+- Confirm that skipped items do NOT appear in review_queue.csv
