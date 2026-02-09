@@ -125,6 +125,37 @@ def generate_review_queue(client, output_dir="."):
                     "candidate_ids": "",
                 })
 
+    skipped_path = os.path.join(output_dir, "skipped.csv")
+    if os.path.exists(skipped_path):
+        with open(skipped_path, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for idx, row in enumerate(reader):
+                input_type = row.get("type", "unknown")
+                media_type = _parse_media_type(input_type)
+
+                rows.append({
+                    "source_file": "skipped.csv",
+                    "review_reason": "no_match",
+                    "original_row_id": idx,
+                    "original_confidence": 0,
+                    "input_title": row.get("title", ""),
+                    "input_type": input_type,
+                    "confidence": 0,
+                    "status": "no_match",
+                    "tmdb_id": "",
+                    "media_type": media_type,
+                    "tmdb_url": "",
+                    "year": "",
+                    "genres": "",
+                    "stars": "",
+                    "released_by": "",
+                    "vision_by_label": "",
+                    "vision_by": "",
+                    "poster_path": "",
+                    "candidate_rank": 0,
+                    "candidate_ids": "",
+                })
+
     if os.path.exists(needs_review_path):
         with open(needs_review_path, "r", encoding="utf-8") as f:
             reader = csv.DictReader(f)
