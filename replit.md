@@ -37,6 +37,7 @@ One command produces all outputs. Running `python netflix2trakt.py` (or `python 
 - Errors during processing — Entity goes to failures.csv
 
 ## Recent Changes
+- **scoring_breakdown**: Added 5 scoring component columns (`title_similarity`, `popularity`, `popularity_bonus`, `vote_count`, `vote_count_bonus`) to `review_queue.csv`, `resolved.csv`, and `needs_review.csv`. Shows the full breakdown of how each candidate's confidence score was computed. In `needs_review.csv`, components are stored as semicolon-separated values per candidate (e.g., `candidate_title_similarities`, `candidate_popularities`, etc.).
 - **candidate_confidence**: Added per-candidate confidence scoring via `compute_all_confidences()`. Candidates sorted by `candidate_confidence` descending; `candidate_rank` assigned from that ordering. Row-level `confidence` = max `candidate_confidence`. `review_queue.csv` includes both `confidence` and `candidate_confidence`.
 - **data_source**: Added `data_source` column to all routing CSVs and `review_queue.csv`. Values: `test` (stub mode) or `live` (real TMDb). Never mixed within a single run.
 - **best_candidate_title**: Added `best_candidate_title` column to `needs_review.csv` showing the top candidate's title for quick reference (not used downstream)
@@ -74,7 +75,14 @@ A single consolidated CSV containing everything a human needs to review. Control
 - **Ambiguous candidates** — Items from needs_review.csv, expanded to one row per candidate TMDb ID. Each row enriched with full metadata so the human can pick the right one.
 
 **Columns (in order):**
-`source_file, review_reason, original_row_id, original_confidence, input_title, input_type, confidence, candidate_confidence, status, tmdb_id, media_type, tmdb_url, year, genres, stars, released_by, vision_by_label, vision_by, poster_path, candidate_rank, candidate_ids, data_source`
+`source_file, review_reason, original_row_id, original_confidence, input_title, input_type, confidence, candidate_confidence, status, tmdb_id, media_type, tmdb_url, title_similarity, popularity, popularity_bonus, vote_count, vote_count_bonus, year, genres, stars, released_by, vision_by_label, vision_by, poster_path, candidate_rank, candidate_ids, data_source`
+
+**Scoring breakdown per row:**
+- `title_similarity` — How closely the candidate title matches the search query (0–1, from SequenceMatcher)
+- `popularity` — Raw TMDb popularity number
+- `popularity_bonus` — Capped contribution to score (0–0.15); computed as min(popularity / 200, 0.15)
+- `vote_count` — Raw number of TMDb votes/ratings
+- `vote_count_bonus` — Capped contribution to score (0–0.10); computed as min(vote_count / 50000, 0.10)
 
 **Enrichment metadata per row:**
 - `tmdb_url` — Direct link to TMDb page

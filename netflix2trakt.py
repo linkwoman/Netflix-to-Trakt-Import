@@ -106,21 +106,24 @@ def getShowInformation(show, client, languageSearch, traktIO, reviewRouter=None)
 
         scored = compute_all_confidences(show.name, tmdbShow, media_type="show")
         if scored:
-            best, conf = scored[0]
+            best, conf, best_components = scored[0]
         else:
-            conf, best = 0.0, None
+            conf, best, best_components = 0.0, None, {}
 
         if reviewRouter:
             top5 = scored[:5]
-            candidate_ids = [str(c.get("id", "")) for c, _ in top5]
-            candidate_confidences = [s for _, s in top5]
+            candidate_ids = [str(c.get("id", "")) for c, _, _comp in top5]
+            candidate_confidences = [s for _, s, _comp in top5]
+            candidate_components = [comp for _, _, comp in top5]
             if conf >= CONFIDENCE_AUTO_ACCEPT:
                 reviewRouter.add_resolved(
-                    show.name, "tv_show", conf, best.get("id"), best.get("name", "")
+                    show.name, "tv_show", conf, best.get("id"), best.get("name", ""),
+                    components=best_components,
                 )
             elif conf >= CONFIDENCE_REVIEW:
                 reviewRouter.add_needs_review(
-                    show.name, "tv_show", conf, candidate_ids, candidate_confidences, best.get("name", "")
+                    show.name, "tv_show", conf, candidate_ids, candidate_confidences, best.get("name", ""),
+                    candidate_components=candidate_components,
                 )
             else:
                 reviewRouter.add_skipped(
@@ -255,21 +258,24 @@ def getMovieInformation(movie, strictSync, client, traktIO, reviewRouter=None):
         if res:
             scored = compute_all_confidences(movie.name, res, media_type="movie")
             if scored:
-                best, conf = scored[0]
+                best, conf, best_components = scored[0]
             else:
-                conf, best = 0.0, None
+                conf, best, best_components = 0.0, None, {}
 
             if reviewRouter:
                 top5 = scored[:5]
-                candidate_ids = [str(c.get("id", "")) for c, _ in top5]
-                candidate_confidences = [s for _, s in top5]
+                candidate_ids = [str(c.get("id", "")) for c, _, _comp in top5]
+                candidate_confidences = [s for _, s, _comp in top5]
+                candidate_components = [comp for _, _, comp in top5]
                 if conf >= CONFIDENCE_AUTO_ACCEPT:
                     reviewRouter.add_resolved(
-                        movie.name, "movie", conf, best.get("id"), best.get("title", "")
+                        movie.name, "movie", conf, best.get("id"), best.get("title", ""),
+                        components=best_components,
                     )
                 elif conf >= CONFIDENCE_REVIEW:
                     reviewRouter.add_needs_review(
-                        movie.name, "movie", conf, candidate_ids, candidate_confidences, best.get("title", "")
+                        movie.name, "movie", conf, candidate_ids, candidate_confidences, best.get("title", ""),
+                        candidate_components=candidate_components,
                     )
                 else:
                     reviewRouter.add_skipped(
@@ -350,8 +356,8 @@ class ReviewRouter:
         self._next_id += 1
         return row_id
 
-    def add_resolved(self, title, media_type, confidence, tmdb_id, matched_title):
-        self._resolved.append({
+    def add_resolved(self, title, media_type, confidence, tmdb_id, matched_title, components=None):
+        row = {
             "original_row_id": self._assign_id(),
             "title": title,
             "type": media_type,
@@ -359,10 +365,17 @@ class ReviewRouter:
             "tmdb_id": tmdb_id,
             "matched_title": matched_title,
             "data_source": self.data_source,
-        })
+        }
+        if components:
+            row["title_similarity"] = components.get("title_similarity", "")
+            row["popularity"] = components.get("popularity", "")
+            row["popularity_bonus"] = components.get("popularity_bonus", "")
+            row["vote_count"] = components.get("vote_count", "")
+            row["vote_count_bonus"] = components.get("vote_count_bonus", "")
+        self._resolved.append(row)
 
-    def add_needs_review(self, title, media_type, confidence, candidate_ids, candidate_confidences, best_candidate_title=""):
-        self._needs_review.append({
+    def add_needs_review(self, title, media_type, confidence, candidate_ids, candidate_confidences, best_candidate_title="", candidate_components=None):
+        row = {
             "original_row_id": self._assign_id(),
             "title": title,
             "type": media_type,
@@ -371,7 +384,14 @@ class ReviewRouter:
             "candidate_ids": ";".join(candidate_ids),
             "candidate_confidences": ";".join(str(s) for s in candidate_confidences),
             "data_source": self.data_source,
-        })
+        }
+        if candidate_components:
+            row["candidate_title_similarities"] = ";".join(str(comp.get("title_similarity", "")) for comp in candidate_components)
+            row["candidate_popularities"] = ";".join(str(comp.get("popularity", "")) for comp in candidate_components)
+            row["candidate_popularity_bonuses"] = ";".join(str(comp.get("popularity_bonus", "")) for comp in candidate_components)
+            row["candidate_vote_counts"] = ";".join(str(comp.get("vote_count", "")) for comp in candidate_components)
+            row["candidate_vote_count_bonuses"] = ";".join(str(comp.get("vote_count_bonus", "")) for comp in candidate_components)
+        self._needs_review.append(row)
 
     def add_skipped(self, title, media_type, reason):
         self._skipped.append({
@@ -395,7 +415,11 @@ class ReviewRouter:
         resolved_path = os.path.join(self.output_dir, "resolved.csv")
         with open(resolved_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(
-                f, fieldnames=["original_row_id", "title", "type", "confidence", "tmdb_id", "matched_title", "data_source"]
+                f, fieldnames=[
+                    "original_row_id", "title", "type", "confidence", "tmdb_id", "matched_title",
+                    "title_similarity", "popularity", "popularity_bonus", "vote_count", "vote_count_bonus",
+                    "data_source",
+                ]
             )
             writer.writeheader()
             writer.writerows(self._resolved)
@@ -403,7 +427,13 @@ class ReviewRouter:
         review_path = os.path.join(self.output_dir, "needs_review.csv")
         with open(review_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(
-                f, fieldnames=["original_row_id", "title", "type", "confidence", "best_candidate_title", "candidate_ids", "candidate_confidences", "data_source"]
+                f, fieldnames=[
+                    "original_row_id", "title", "type", "confidence", "best_candidate_title",
+                    "candidate_ids", "candidate_confidences",
+                    "candidate_title_similarities", "candidate_popularities", "candidate_popularity_bonuses",
+                    "candidate_vote_counts", "candidate_vote_count_bonuses",
+                    "data_source",
+                ]
             )
             writer.writeheader()
             writer.writerows(self._needs_review)

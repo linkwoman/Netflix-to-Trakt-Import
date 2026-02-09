@@ -262,16 +262,25 @@ def _score_candidate(query_lower, candidate, media_type):
     else:
         candidate_title = candidate.get("name", "").lower()
 
-    similarity = SequenceMatcher(None, query_lower, candidate_title).ratio()
+    similarity = round(SequenceMatcher(None, query_lower, candidate_title).ratio(), 4)
 
     pop = candidate.get("popularity", 0)
-    pop_bonus = min(pop / 200.0, 0.15)
+    pop_bonus = round(min(pop / 200.0, 0.15), 4)
 
     votes = candidate.get("vote_count", 0)
-    vote_bonus = min(votes / 50000.0, 0.1)
+    vote_bonus = round(min(votes / 50000.0, 0.1), 4)
 
     score = similarity * 0.75 + pop_bonus + vote_bonus
-    return round(min(score, 1.0), 4)
+    score = round(min(score, 1.0), 4)
+
+    components = {
+        "title_similarity": similarity,
+        "popularity": pop,
+        "popularity_bonus": pop_bonus,
+        "vote_count": votes,
+        "vote_count_bonus": vote_bonus,
+    }
+    return score, components
 
 
 def compute_all_confidences(query, candidates, media_type="movie"):
@@ -281,8 +290,8 @@ def compute_all_confidences(query, candidates, media_type="movie"):
     query_lower = query.strip().lower()
     scored = []
     for c in candidates:
-        score = _score_candidate(query_lower, c, media_type)
-        scored.append((c, score))
+        score, components = _score_candidate(query_lower, c, media_type)
+        scored.append((c, score, components))
 
     scored.sort(key=lambda x: x[1], reverse=True)
     return scored
@@ -292,7 +301,7 @@ def compute_confidence(query, candidates, media_type="movie"):
     scored = compute_all_confidences(query, candidates, media_type)
     if not scored:
         return 0.0, None
-    best_candidate, best_score = scored[0]
+    best_candidate, best_score, _components = scored[0]
     return best_score, best_candidate
 
 

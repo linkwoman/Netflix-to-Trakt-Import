@@ -8,6 +8,7 @@ COLUMNS = [
     "source_file", "review_reason", "original_row_id", "original_confidence",
     "input_title", "input_type", "confidence", "candidate_confidence", "status",
     "tmdb_id", "media_type", "tmdb_url",
+    "title_similarity", "popularity", "popularity_bonus", "vote_count", "vote_count_bonus",
     "year", "genres", "stars", "released_by", "vision_by_label", "vision_by", "poster_path",
     "candidate_rank", "candidate_ids", "data_source",
 ]
@@ -115,6 +116,11 @@ def generate_review_queue(client, output_dir="."):
                     "tmdb_id": tmdb_id,
                     "media_type": media_type,
                     "tmdb_url": _build_tmdb_url(media_type, tmdb_id),
+                    "title_similarity": row.get("title_similarity", ""),
+                    "popularity": row.get("popularity", ""),
+                    "popularity_bonus": row.get("popularity_bonus", ""),
+                    "vote_count": row.get("vote_count", ""),
+                    "vote_count_bonus": row.get("vote_count_bonus", ""),
                     "year": enrichment["year"],
                     "genres": enrichment["genres"],
                     "stars": enrichment["stars"],
@@ -148,6 +154,11 @@ def generate_review_queue(client, output_dir="."):
                     "tmdb_id": "",
                     "media_type": media_type,
                     "tmdb_url": "",
+                    "title_similarity": "",
+                    "popularity": "",
+                    "popularity_bonus": "",
+                    "vote_count": "",
+                    "vote_count_bonus": "",
                     "year": "",
                     "genres": "",
                     "stars": "",
@@ -173,9 +184,22 @@ def generate_review_queue(client, output_dir="."):
                 cand_confs = [float(x.strip()) for x in cand_conf_str.split(";") if x.strip()] if cand_conf_str else []
                 data_source = row.get("data_source", "")
 
+                def _parse_semicolon_floats(field_name):
+                    raw = row.get(field_name, "")
+                    if not raw:
+                        return []
+                    return [x.strip() for x in raw.split(";") if x.strip()]
+
+                ts_list = _parse_semicolon_floats("candidate_title_similarities")
+                pop_list = _parse_semicolon_floats("candidate_popularities")
+                pop_bonus_list = _parse_semicolon_floats("candidate_popularity_bonuses")
+                vc_list = _parse_semicolon_floats("candidate_vote_counts")
+                vc_bonus_list = _parse_semicolon_floats("candidate_vote_count_bonuses")
+
                 for rank, cid in enumerate(candidate_ids, start=1):
                     enrichment = _enrich(client, media_type, cid, cache)
                     cc = cand_confs[rank - 1] if rank - 1 < len(cand_confs) else 0
+                    idx = rank - 1
 
                     rows.append({
                         "source_file": "needs_review.csv",
@@ -190,6 +214,11 @@ def generate_review_queue(client, output_dir="."):
                         "tmdb_id": cid,
                         "media_type": media_type,
                         "tmdb_url": _build_tmdb_url(media_type, cid),
+                        "title_similarity": ts_list[idx] if idx < len(ts_list) else "",
+                        "popularity": pop_list[idx] if idx < len(pop_list) else "",
+                        "popularity_bonus": pop_bonus_list[idx] if idx < len(pop_bonus_list) else "",
+                        "vote_count": vc_list[idx] if idx < len(vc_list) else "",
+                        "vote_count_bonus": vc_bonus_list[idx] if idx < len(vc_bonus_list) else "",
                         "year": enrichment["year"],
                         "genres": enrichment["genres"],
                         "stars": enrichment["stars"],
