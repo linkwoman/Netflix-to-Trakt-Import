@@ -2,8 +2,10 @@
 
 import csv
 import datetime
+import json
 import logging
 import os
+import random
 import re
 import uuid
 from time import sleep
@@ -494,7 +496,8 @@ def verify_accounting(total_entities, counts):
 
 def generate_run_summary(
     run_id, input_file, input_row_count, tmdb_mode, trakt_dry_run,
-    counts, queue_count, review_reasons, log_path, output_dir="."
+    counts, queue_count, review_reasons, log_path, output_dir=".",
+    total_entities_before_sample=None, sampled_entity_count=None,
 ):
     resolved_n = counts["resolved"]
     needs_review_n = counts["needs_review"]
@@ -519,12 +522,21 @@ def generate_run_summary(
     no_match_items = review_reasons.get("no_match", 0)
     low_conf_items = review_reasons.get("low_confidence_resolved", 0)
 
+    sampling_line = None
+    if total_entities_before_sample is not None and sampled_entity_count is not None:
+        if sampled_entity_count < total_entities_before_sample:
+            sampling_line = f"- Sampling: {sampled_entity_count} of {total_entities_before_sample} entities sampled (cap={STUB_SAMPLE_CAP}, multiplier={STUB_SAMPLE_MULTIPLIER})"
+
     lines = [
         paragraph,
         "",
         f"- Run ID: {run_id}",
         f"- Mode: TMDb={tmdb_mode}, Trakt dry_run={trakt_dry_run}",
         f"- Input: {input_file} ({input_row_count} rows)",
+    ]
+    if sampling_line:
+        lines.append(sampling_line)
+    lines += [
         "- Outputs:",
         f"  - resolved.csv: {resolved_n} rows (confidence >= 0.95)",
         f"  - needs_review.csv: {needs_review_n} rows",
@@ -575,6 +587,37 @@ def count_review_reasons(review_queue_path):
     return reasons
 
 
+STUB_SAMPLE_MULTIPLIER = 3
+STUB_SAMPLE_CAP = 50  # raise to 2000 if you want to test performance with a large input
+
+
+def count_fixture_titles(fixtures_path=None):
+    if fixtures_path is None:
+        fixtures_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "fixtures", "tmdb_stub.json"
+        )
+    with open(fixtures_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    movie_count = len(data.get("movies", {}))
+    show_count = len(data.get("shows", {}))
+    return movie_count + show_count
+
+
+def compute_stub_sample_size(fixtures_path=None):
+    fixture_count = count_fixture_titles(fixtures_path)
+    return min(fixture_count * STUB_SAMPLE_MULTIPLIER, STUB_SAMPLE_CAP)
+
+
+def sample_entities(shows, movies, sample_size):
+    all_entities = [("show", s) for s in shows] + [("movie", m) for m in movies]
+    if len(all_entities) <= sample_size:
+        return shows, movies
+    sampled = random.sample(all_entities, sample_size)
+    sampled_shows = [e for t, e in sampled if t == "show"]
+    sampled_movies = [e for t, e in sampled if t == "movie"]
+    return sampled_shows, sampled_movies
+
+
 def main():
     run_id = datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:8]
     log_path = setup_logging(run_id)
@@ -605,10 +648,27 @@ def main():
     total_entities = total_shows + total_movies
     logging.info(f"Parsed {total_shows} shows and {total_movies} movies ({total_entities} entities) from {input_row_count} CSV rows")
 
+    shows_to_process = netflixHistory.shows
+    movies_to_process = netflixHistory.movies
+    sampled = False
+
+    if config.TMDB_MODE == "stub":
+        sample_size = compute_stub_sample_size()
+        if total_entities > sample_size:
+            shows_to_process, movies_to_process = sample_entities(
+                netflixHistory.shows, netflixHistory.movies, sample_size
+            )
+            sampled = True
+            total_entities = len(shows_to_process) + len(movies_to_process)
+            logging.info(
+                f"Stub mode: sampled {total_entities} entities (from {total_shows + total_movies} total) "
+                f"using cap={STUB_SAMPLE_CAP}, multiplier={STUB_SAMPLE_MULTIPLIER}"
+            )
+
     data_source = "test" if config.TMDB_MODE == "stub" else "live"
     reviewRouter = ReviewRouter(data_source=data_source)
 
-    for show in tqdm(netflixHistory.shows, desc="Finding and adding shows to Trakt.."):
+    for show in tqdm(shows_to_process, desc="Finding and adding shows to Trakt.."):
         try:
             getShowInformation(
                 show, client, config.TMDB_EPISODE_LANGUAGE_SEARCH, traktIO, reviewRouter
@@ -618,7 +678,7 @@ def main():
             reviewRouter.add_failure(show.name, "tv_show", str(e))
 
     for movie in tqdm(
-        netflixHistory.movies, desc="Finding and adding movies to Trakt.."
+        movies_to_process, desc="Finding and adding movies to Trakt.."
     ):
         try:
             getMovieInformation(movie, config.TMDB_SYNC_STRICT, client, traktIO, reviewRouter)
@@ -638,6 +698,7 @@ def main():
 
     review_reasons = count_review_reasons("review_queue.csv")
 
+    total_before = total_shows + total_movies
     summary_path = generate_run_summary(
         run_id=run_id,
         input_file=config.VIEWING_HISTORY_FILENAME,
@@ -648,6 +709,8 @@ def main():
         queue_count=queue_count,
         review_reasons=review_reasons,
         log_path=log_path,
+        total_entities_before_sample=total_before,
+        sampled_entity_count=total_entities,
     )
 
     logging.info(f"=== Run {run_id} completed ===")

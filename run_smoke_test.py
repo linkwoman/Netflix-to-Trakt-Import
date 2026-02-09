@@ -22,8 +22,12 @@ from netflix2trakt import (
     verify_accounting,
     generate_run_summary,
     count_review_reasons,
+    compute_stub_sample_size,
+    sample_entities,
     CONFIDENCE_AUTO_ACCEPT,
     CONFIDENCE_REVIEW,
+    STUB_SAMPLE_CAP,
+    STUB_SAMPLE_MULTIPLIER,
 )
 from tmdb_client import compute_confidence
 from review_queue import generate_review_queue
@@ -54,11 +58,22 @@ def main():
     total_movies = len(netflixHistory.movies)
     total_entities = total_shows + total_movies
 
-    print(f"\nParsed {total_shows} shows and {total_movies} movies ({total_entities} entities) from {input_row_count} CSV rows\n")
+    print(f"\nParsed {total_shows} shows and {total_movies} movies ({total_entities} entities) from {input_row_count} CSV rows")
+
+    shows_to_process = netflixHistory.shows
+    movies_to_process = netflixHistory.movies
+    sample_size = compute_stub_sample_size()
+    if total_entities > sample_size:
+        shows_to_process, movies_to_process = sample_entities(
+            netflixHistory.shows, netflixHistory.movies, sample_size
+        )
+        total_entities = len(shows_to_process) + len(movies_to_process)
+        print(f"Stub sampling: {total_entities} entities sampled (cap={STUB_SAMPLE_CAP}, multiplier={STUB_SAMPLE_MULTIPLIER})")
+    print()
 
     reviewRouter = ReviewRouter()
 
-    for show in tqdm(netflixHistory.shows, desc="Processing shows"):
+    for show in tqdm(shows_to_process, desc="Processing shows"):
         try:
             getShowInformation(
                 show, client, config.TMDB_EPISODE_LANGUAGE_SEARCH, traktIO, reviewRouter
@@ -66,7 +81,7 @@ def main():
         except Exception as e:
             reviewRouter.add_failure(show.name, "tv_show", str(e))
 
-    for movie in tqdm(netflixHistory.movies, desc="Processing movies"):
+    for movie in tqdm(movies_to_process, desc="Processing movies"):
         try:
             getMovieInformation(movie, config.TMDB_SYNC_STRICT, client, traktIO, reviewRouter)
         except Exception as e:
@@ -82,6 +97,7 @@ def main():
 
     review_reasons = count_review_reasons("review_queue.csv")
 
+    total_before = total_shows + total_movies
     summary_path = generate_run_summary(
         run_id=run_id,
         input_file=config.VIEWING_HISTORY_FILENAME,
@@ -92,6 +108,8 @@ def main():
         queue_count=queue_count,
         review_reasons=review_reasons,
         log_path=log_path,
+        total_entities_before_sample=total_before,
+        sampled_entity_count=total_entities,
     )
 
     print("\n" + "=" * 60)

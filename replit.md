@@ -104,6 +104,7 @@ To interpret: open `run_summary.txt` and check the counts. If `failures.csv` has
 ### Stub Mode (no API keys needed)
 1. Run `python run_smoke_test.py` to test the full pipeline
 2. Check outputs: resolved.csv, needs_review.csv, skipped.csv, failures.csv, review_queue.csv, run_summary.txt, logs/
+3. **Input sampling**: In stub mode, the pipeline automatically caps the number of entities processed to `min(fixture_count × 3, 50)`. This keeps smoke tests fast while still exercising a representative mix of matches. If the input has fewer entities than the sample size, all are processed. To test with large inputs, change `STUB_SAMPLE_CAP` in `netflix2trakt.py` to 2000.
 
 ### Real Mode
 1. Copy `config_defaults.ini` to `config.ini`
