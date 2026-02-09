@@ -86,6 +86,57 @@ cp config_default.ini config.ini
 * Click "Save App"
 * Make note of your details to be used later.
 
+## TMDb Stub Mode
+
+You can run the full pipeline without a TMDb API key by using **stub mode**. This is useful for testing and iterating on the matching/confidence logic.
+
+### Configuration
+
+In `config_defaults.ini` (or your `config.ini`), the `[TMDB]` section has a `mode` setting:
+
+```ini
+[TMDB]
+mode = stub    # "stub" = local fixtures, no network; "real" = live TMDb API (requires api_key)
+```
+
+The `[Trakt]` section has `dry_run`:
+
+```ini
+[Trakt]
+dry_run = True   # True = skip all Trakt API calls; False = actually sync
+```
+
+By default, `mode = stub` and `dry_run = True`, so no API keys are needed to run the pipeline.
+
+### Fixtures
+
+Stub mode reads realistic TMDb-like responses from `fixtures/tmdb_stub.json`. This file contains:
+
+- **movies**: keyed by lowercase title, each mapping to a list of candidate objects with `id`, `title`, `release_date`, `overview`, `popularity`, `vote_count`
+- **shows**: keyed by lowercase show name, same structure but with `name` and `first_air_date`
+- **show_details**: keyed by show ID string, with `number_of_seasons`
+- **seasons**: keyed by `{show_id}_{season_number}`, with episode lists
+
+If a query is not found in fixtures, a heuristic generator creates 0-3 plausible (but distinct) candidates so the pipeline keeps flowing.
+
+### Confidence Scoring & Review Routing
+
+After candidate retrieval, each item is scored and routed:
+
+- **resolved.csv** - auto-accepted matches (confidence >= 0.80)
+- **needs_review.csv** - ambiguous matches (confidence 0.40-0.80), includes candidate IDs
+- **skipped.csv** - no candidates or very low confidence (< 0.40)
+
+### Running the Sample Test
+
+A smoke test with a sample Netflix CSV is included:
+
+```bash
+python run_smoke_test.py
+```
+
+This runs the full pipeline in `TMDB_MODE=stub` and `DRY_RUN=true` using `fixtures/sample_viewing_history.csv` (12 rows including unambiguous shows, ambiguous titles, and zero-match entries). It outputs `resolved.csv`, `needs_review.csv`, `skipped.csv` and prints a summary.
+
 ## Future improvements:
 * Check found TMDB shows/movies before sending to trakt.tv
 * Better print outputs

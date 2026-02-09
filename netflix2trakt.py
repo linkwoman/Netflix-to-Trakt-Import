@@ -2,66 +2,47 @@
 
 import csv
 import logging
+import os
 import re
 from time import sleep
 
 from tenacity import retry, stop_after_attempt, wait_random
-from tmdbv3api import TV, Episode, Movie, Season, TMDb
 from tmdbv3api.exceptions import TMDbException
 from tqdm import tqdm
 
 import config
 from NetflixTvShow import NetflixTvHistory
 from TraktIO import TraktIO
+from tmdb_client import create_tmdb_client, compute_confidence
 
 
-def setupTMDB(tmdbKey, tmdbLanguage, tmdbDebug):
-    """
-    Sets up information to access TMDB.
+CONFIDENCE_AUTO_ACCEPT = 0.80
+CONFIDENCE_REVIEW = 0.40
 
-    :param tmdbKey: API key for TMDB
-    :param tmdbLanguage: Preferred language for TMDB
-    :param tmdbDebug: Boolean value for debug mode
-    :return: Returns `tmdb` object that contains TMDB information
-    """
-    tmdb = TMDb()
-    tmdb.api_key = tmdbKey
-    tmdb.language = tmdbLanguage
-    tmdb.debug = tmdbDebug
-    return tmdb
+
+def setupTMDB(tmdbMode, tmdbKey, tmdbLanguage, tmdbDebug):
+    return create_tmdb_client(
+        mode=tmdbMode,
+        api_key=tmdbKey,
+        language=tmdbLanguage,
+        debug=tmdbDebug,
+    )
 
 
 def setupTrakt(traktPageSize, traktDryRun):
-    """
-    Sets up Trakt information.
-
-    :param traktPageSize: Number of items to be sync'd to Trakt at a time
-    :param traktDryRun: Boolean value to determine if identified movies/TV shows are uploaded to Trakt
-    :return: Returns `traktIO` object that contains Trakt information
-    """
     traktIO = TraktIO(page_size=traktPageSize, dry_run=traktDryRun)
     return traktIO
 
 
 def getNetflixHistory(inputFile, inputFileDelimiter):
-    """
-    Parses Netflix viewing history in CSV format.
-
-    :param inputFile: File containing Netflix viewing history
-    :param inputFileDelimiter: Delimiter used in Netflix viewing history (ex. CSV = `,`)
-    :return: Returns `netflixHistory` that contains information parsed from viewing history CSV
-    """
-    # Load Netlix Viewing History and loop through every entry
     netflixHistory = NetflixTvHistory()
     with open(inputFile, mode="r", encoding="utf-8") as csvFile:
-        # Make sure the file has a header "Title, Date" (first line)
         csvReader = csv.DictReader(
             csvFile, fieldnames=("Title", "Date"), delimiter=inputFileDelimiter
         )
         line_count = 0
         for row in csvReader:
             if line_count == 0:
-                # Skip Header
                 line_count += 1
                 continue
 
@@ -70,57 +51,59 @@ def getNetflixHistory(inputFile, inputFileDelimiter):
 
             logging.debug("Parsed CSV file entry: {} : {}".format(watchedAt, entry))
 
-            # Add entry to the netflix History class to collect all shows, seasons, episodes and watch dates
             netflixHistory.addEntry(entry, watchedAt)
 
             line_count += 1
         logging.info(f"Processed {line_count} lines.")
 
-        # Print result
-        # logging.debug(netflixHistory.getJson())
-
     return netflixHistory
 
 
 @retry(stop=stop_after_attempt(5), wait=wait_random(min=2, max=10))
-def getShowInformation(show, tmdb, languageSearch, traktIO):
-    """
-    Parse TV show information,attempt to find a match on TMDB, and add it to the Trakt class object if found.
-
-    :param show: A show that was identified when parsing Netflix viewing history
-    :param tmdb: TMDB class object that contains information related to specified account
-    :param languageSearch: Boolean value to look for translations of matching names
-    :param traktIO: Trakt class object that holds Trakt information (API, list of shows/movies, etc.)
-    """
-    # Find TMDB IDs
-    tmdbTv = TV()
-    tmdbSeason = Season()
-    tmdbEp = Episode()
+def getShowInformation(show, client, languageSearch, traktIO, reviewRouter=None):
     tmdbShow = None
     try:
         if len(show.name.strip()) != 0:
-            tmdbShow = tmdbTv.search(show.name)
+            tmdbShow = client.search_tv(show.name)
         if tmdbShow is None or len(tmdbShow) == 0:
             logging.warning("Show %s not found on TMDB!" % show.name)
+            if reviewRouter:
+                reviewRouter.add_skipped(show.name, "tv_show", "No candidates found")
             return
 
-        showId = tmdbShow[0]["id"]
-        details = tmdbTv.details(show_id=showId, append_to_response="")
+        conf, best = compute_confidence(show.name, tmdbShow, media_type="show")
+
+        if reviewRouter:
+            candidate_ids = [str(c.get("id", "")) for c in tmdbShow[:5]]
+            if conf >= CONFIDENCE_AUTO_ACCEPT:
+                reviewRouter.add_resolved(
+                    show.name, "tv_show", conf, best.get("id"), best.get("name", "")
+                )
+            elif conf >= CONFIDENCE_REVIEW:
+                reviewRouter.add_needs_review(
+                    show.name, "tv_show", conf, candidate_ids
+                )
+            else:
+                reviewRouter.add_skipped(
+                    show.name, "tv_show", f"Low confidence: {conf}"
+                )
+                return
+
+        showId = best.get("id", tmdbShow[0]["id"])
+        details = client.tv_details(show_id=showId, append_to_response="")
         numSeasons = details.number_of_seasons
 
         for season in show.seasons:
             if season.number is None and season.name is None:
-                # No season, then don't do anything
                 continue
 
             if season.number is None and season.name is not None:
-                # Try to get season number from season name
                 for i in range(1, numSeasons + 1):
                     logging.debug(
                         "Requesting show %s (id %s) season %d / %d\n"
                         % (show.name, showId, int(i), int(numSeasons))
                     )
-                    tmp = tmdbSeason.details(
+                    tmp = client.season_details(
                         tv_id=showId, season_num=i, append_to_response="translations"
                     )
                     sleep(0.1)
@@ -134,18 +117,17 @@ def getShowInformation(show, tmdb, languageSearch, traktIO):
                     continue
 
             if season.number is not None:
-                # Main loop
                 logging.debug(showId)
                 if int(season.number) > numSeasons:
-                    season.number = numSeasons  # Netflix sometimes splits seasons that are actually one (example: Lupin)
+                    season.number = numSeasons
 
                 try:
-                    tmdbResult = tmdbSeason.details(
+                    tmdbResult = client.season_details(
                         tv_id=showId,
                         season_num=season.number,
                         append_to_response="translations",
                     )
-                except TMDbException as err:
+                except (TMDbException, Exception) as err:
                     logging.error(
                         f"\nUnexpected error when searching for the season number of the show {show.name} "
                         f'by the season name "{season.name}", error at search for season {season.number}: {err}. \n'
@@ -160,24 +142,23 @@ def getShowInformation(show, tmdb, languageSearch, traktIO):
                     )
                     for tmdbEpisode in tmdbResult.episodes:
                         try:
-                            epInfo = tmdbEp.details(
+                            epInfo = client.episode_details(
                                 tv_id=showId,
                                 season_num=season.number,
                                 episode_num=tmdbEpisode.episode_number,
                                 append_to_response="translations",
                             )
-                        except TMDbException as err:
+                        except (TMDbException, Exception) as err:
                             logging.error(f"Error: {err}")
                             continue
                         for epTranslation in epInfo.translations.translations:
-                            if epTranslation.iso_639_1 == tmdb.language:
+                            if epTranslation.iso_639_1 == client.language:
                                 tmdbEpisode.name = epTranslation.data.name
                         sleep(0.1)
                 count = 0
                 for episode in season.episodes:
                     found = False
                     for tmdbEpisode in tmdbResult.episodes:
-                        # Compare TMDB episode names with Netflix Viewing History Episode name
                         logging.debug(tmdbEpisode.name)
                         if tmdbEpisode.name == episode.name:
                             episode.setTmdbId(tmdbEpisode.id)
@@ -186,7 +167,6 @@ def getShowInformation(show, tmdb, languageSearch, traktIO):
                             count += 1
                             break
                     if not (found):
-                        # Try finding episode number in the name
                         tvshowregex = re.compile(r"(?:Folge|Episode) (\d{1,2})")
                         res = tvshowregex.search(episode.name)
                         if res is not None:
@@ -200,9 +180,7 @@ def getShowInformation(show, tmdb, languageSearch, traktIO):
                                         found = True
                                         break
 
-                # Try to estimate episode number from not found TMDB Names by number of episodes watched = number of episodes in season
                 if len(tmdbResult.episodes) == len(season.episodes):
-                    # WHole season was watched, no title names found
                     lastEpisodeNumber = len(season.episodes)
                     for episode in season.episodes:
                         if episode.tmdbId is not None:
@@ -231,26 +209,40 @@ def getShowInformation(show, tmdb, languageSearch, traktIO):
         logging.error(f"TMDB does not contain show {show.name}: {err}")
 
 
-def getMovieInformation(movie, strictSync, traktIO):
-    """
-    Parse movie information, attempt to find a match on TMDB, and add it to the Trakt class object if found.
-
-    :param movie: A movie that was identified when parsing Netflix viewing history
-    :param strictSync: Boolean value to determine if movie name searches should be exact matches
-    :param traktIO: Trakt class object that holds Trakt information (API, list of shows/movies, etc.)
-    """
-    tmdbMovie = Movie()
+def getMovieInformation(movie, strictSync, client, traktIO, reviewRouter=None):
     try:
-        res = tmdbMovie.search(movie.name)
+        res = client.search_movie(movie.name)
+
         if res:
-            movie.tmdbId = res[0]["id"]
+            conf, best = compute_confidence(movie.name, res, media_type="movie")
+
+            if reviewRouter:
+                candidate_ids = [str(c.get("id", "")) for c in res[:5]]
+                if conf >= CONFIDENCE_AUTO_ACCEPT:
+                    reviewRouter.add_resolved(
+                        movie.name, "movie", conf, best.get("id"), best.get("title", "")
+                    )
+                elif conf >= CONFIDENCE_REVIEW:
+                    reviewRouter.add_needs_review(
+                        movie.name, "movie", conf, candidate_ids
+                    )
+                else:
+                    reviewRouter.add_skipped(
+                        movie.name, "movie", f"Low confidence: {conf}"
+                    )
+                    return
+
+            movie.tmdbId = best.get("id", res[0]["id"])
+            matched_title = best.get("title", res[0].get("title", ""))
             logging.info(
-                "Found movie %s : %s (%d)" % (movie.name, res[0]["title"], movie.tmdbId)
+                "Found movie %s : %s (%d)" % (movie.name, matched_title, movie.tmdbId)
             )
             return addMovieToTrakt(movie, traktIO)
 
         else:
             logging.info("Movie not found: %s" % movie.name)
+            if reviewRouter:
+                reviewRouter.add_skipped(movie.name, "movie", "No candidates found")
     except TMDbException:
         if strictSync is True:
             raise
@@ -262,12 +254,6 @@ def getMovieInformation(movie, strictSync, traktIO):
 
 @retry(stop=stop_after_attempt(5), wait=wait_random(min=2, max=10))
 def addShowToTrakt(show, traktIO):
-    """
-    Add a show to the Trakt class object.
-
-    :param show: A show that was identified when parsing Netflix viewing history
-    :param traktIO: Trakt class object that holds Trakt information (API, list of shows/movies, etc.)
-    """
     for season in show.seasons:
         logging.info(
             f"Adding episodes to trakt: {len(season.episodes)} episodes from {show.name} season {season.number}"
@@ -284,12 +270,6 @@ def addShowToTrakt(show, traktIO):
 
 @retry(stop=stop_after_attempt(5), wait=wait_random(min=2, max=10))
 def addMovieToTrakt(movie, traktIO):
-    """
-    Add a movie to the Trakt class object.
-
-    :param movie: A movie that was identified when parsing Netflix viewing history
-    :param traktIO: Trakt class object that holds Trakt information (API, list of shows/movies, etc.)
-    """
     if movie.tmdbId is not None:
         for watchedTime in movie.watchedAt:
             logging.info("Adding movie to trakt: %s" % movie.name)
@@ -304,48 +284,119 @@ def addMovieToTrakt(movie, traktIO):
 
 @retry(stop=stop_after_attempt(5), wait=wait_random(min=2, max=10))
 def syncToTrakt(traktIO):
-    """
-    Sync information that was added to the Trakt class object.
-
-    :param traktIO: Trakt class object that holds Trakt information (API, list of shows/movies, etc.)
-    """
     try:
         traktIO.sync()
     except Exception:
         pass
 
 
+class ReviewRouter:
+    def __init__(self, output_dir="."):
+        self.output_dir = output_dir
+        self._resolved = []
+        self._needs_review = []
+        self._skipped = []
+
+    def add_resolved(self, title, media_type, confidence, tmdb_id, matched_title):
+        self._resolved.append({
+            "title": title,
+            "type": media_type,
+            "confidence": confidence,
+            "tmdb_id": tmdb_id,
+            "matched_title": matched_title,
+        })
+
+    def add_needs_review(self, title, media_type, confidence, candidate_ids):
+        self._needs_review.append({
+            "title": title,
+            "type": media_type,
+            "confidence": confidence,
+            "candidate_ids": ";".join(candidate_ids),
+        })
+
+    def add_skipped(self, title, media_type, reason):
+        self._skipped.append({
+            "title": title,
+            "type": media_type,
+            "reason": reason,
+        })
+
+    def write_csvs(self):
+        resolved_path = os.path.join(self.output_dir, "resolved.csv")
+        with open(resolved_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(
+                f, fieldnames=["title", "type", "confidence", "tmdb_id", "matched_title"]
+            )
+            writer.writeheader()
+            writer.writerows(self._resolved)
+
+        review_path = os.path.join(self.output_dir, "needs_review.csv")
+        with open(review_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(
+                f, fieldnames=["title", "type", "confidence", "candidate_ids"]
+            )
+            writer.writeheader()
+            writer.writerows(self._needs_review)
+
+        skipped_path = os.path.join(self.output_dir, "skipped.csv")
+        with open(skipped_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=["title", "type", "reason"])
+            writer.writeheader()
+            writer.writerows(self._skipped)
+
+        return {
+            "resolved": len(self._resolved),
+            "needs_review": len(self._needs_review),
+            "skipped": len(self._skipped),
+        }
+
+    def summary(self):
+        return {
+            "resolved": len(self._resolved),
+            "needs_review": len(self._needs_review),
+            "skipped": len(self._skipped),
+        }
+
+
 def main():
-    """
-    Main function that pulls information from config.ini to parse Netflix viewing history and adds identified matches on TMDB to Trakt.
-    """
-    # Setup logging
     logging.basicConfig(filename=config.LOG_FILENAME, level=config.LOG_LEVEL)
 
-    # Connect to TMDB
-    tmdb = setupTMDB(config.TMDB_API_KEY, config.TMDB_LANGUAGE, config.TMDB_DEBUG)
+    client = setupTMDB(
+        config.TMDB_MODE, config.TMDB_API_KEY, config.TMDB_LANGUAGE, config.TMDB_DEBUG
+    )
 
-    # Setup trakt and sync to trakt
     traktIO = setupTrakt(config.TRAKT_API_SYNC_PAGE_SIZE, config.TRAKT_API_DRY_RUN)
-    traktIO.init()
 
-    # Parse Netflix History file
+    if config.TMDB_MODE == "stub" or config.TRAKT_API_DRY_RUN:
+        logging.info("Skipping Trakt authentication (stub/dry_run mode)")
+        traktIO.dry_run = True
+    else:
+        traktIO.init()
+
     netflixHistory = getNetflixHistory(
         config.VIEWING_HISTORY_FILENAME, config.CSV_DELIMITER
     )
 
-    # Get show information
-    for show in tqdm(netflixHistory.shows, desc="Finding and adding shows to Trakt.."):
-        getShowInformation(show, tmdb, config.TMDB_EPISODE_LANGUAGE_SEARCH, traktIO)
+    reviewRouter = ReviewRouter()
 
-    # Get movie information
+    for show in tqdm(netflixHistory.shows, desc="Finding and adding shows to Trakt.."):
+        getShowInformation(
+            show, client, config.TMDB_EPISODE_LANGUAGE_SEARCH, traktIO, reviewRouter
+        )
+
     for movie in tqdm(
         netflixHistory.movies, desc="Finding and adding movies to Trakt.."
     ):
-        getMovieInformation(movie, config.TMDB_SYNC_STRICT, traktIO)
+        getMovieInformation(movie, config.TMDB_SYNC_STRICT, client, traktIO, reviewRouter)
 
-    # Sync to Trakt
     syncToTrakt(traktIO)
+
+    counts = reviewRouter.write_csvs()
+    print(f"\n=== Pipeline Summary ===")
+    print(f"  Resolved (auto-accepted): {counts['resolved']}")
+    print(f"  Needs Review (ambiguous):  {counts['needs_review']}")
+    print(f"  Skipped (no/low match):    {counts['skipped']}")
+    print(f"  Output files: resolved.csv, needs_review.csv, skipped.csv")
 
 
 if __name__ == "__main__":

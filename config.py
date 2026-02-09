@@ -32,6 +32,7 @@ TMDB_SYNC_STRICT = _config.getboolean(Section.TMDB, "strict")
 TMDB_EPISODE_LANGUAGE_SEARCH = _config.getboolean(
     Section.TMDB, "episode_language_search"
 )
+TMDB_MODE = _config.get(Section.TMDB, "mode")
 
 TRAKT_API_CLIENT_ID = _config.get(Section.TRAKT, "id")
 TRAKT_API_CLIENT_SECRET = _config.get(Section.TRAKT, "secret")

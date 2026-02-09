@@ -22,9 +22,9 @@ args = "Run netflix2trakt"
 name = "Run netflix2trakt"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "python netflix2trakt.py"
-
 [workflows.workflow.metadata]
 outputType = "console"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python run_smoke_test.py"

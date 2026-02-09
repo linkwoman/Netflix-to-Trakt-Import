@@ -1,0 +1,117 @@
+{
+  "movies": {
+    "inception": [
+      {"id": 27205, "title": "Inception", "release_date": "2010-07-16", "overview": "A thief who steals corporate secrets through dream-sharing technology is given the inverse task of planting an idea.", "popularity": 82.5, "vote_count": 33000},
+      {"id": 1933, "title": "Inception: The Cobol Job", "release_date": "2010-12-07", "overview": "A prequel comic to the film Inception.", "popularity": 5.2, "vote_count": 45}
+    ],
+    "the matrix": [
+      {"id": 603, "title": "The Matrix", "release_date": "1999-03-31", "overview": "A computer hacker learns about the true nature of reality and his role in the war against its controllers.", "popularity": 75.3, "vote_count": 24000}
+    ],
+    "push": [
+      {"id": 17654, "title": "Push", "release_date": "2009-02-06", "overview": "A group of young Americans with various psychic abilities band together to try to take down a secret government agency.", "popularity": 22.1, "vote_count": 1200},
+      {"id": 88123, "title": "Push", "release_date": "2016-04-15", "overview": "A drama about an aspiring rapper from the streets.", "popularity": 3.4, "vote_count": 18},
+      {"id": 45901, "title": "Pushing Tin", "release_date": "1999-04-23", "overview": "Two rival air traffic controllers try to outdo each other.", "popularity": 8.7, "vote_count": 150}
+    ],
+    "glass onion": [
+      {"id": 661374, "title": "Glass Onion: A Knives Out Mystery", "release_date": "2022-11-23", "overview": "World-famous detective Benoit Blanc heads to Greece to peel back the layers of a mystery.", "popularity": 95.8, "vote_count": 5200}
+    ],
+    "glass onion: a knives out mystery": [
+      {"id": 661374, "title": "Glass Onion: A Knives Out Mystery", "release_date": "2022-11-23", "overview": "World-famous detective Benoit Blanc heads to Greece to peel back the layers of a mystery.", "popularity": 95.8, "vote_count": 5200}
+    ],
+    "don't look up": [
+      {"id": 646380, "title": "Don't Look Up", "release_date": "2021-12-07", "overview": "Two low-level astronomers must go on a media tour to warn mankind of an approaching comet.", "popularity": 88.3, "vote_count": 8400}
+    ],
+    "the old guard": [
+      {"id": 547016, "title": "The Old Guard", "release_date": "2020-07-10", "overview": "A covert team of immortal mercenaries is suddenly exposed and must fight to keep their identity a secret.", "popularity": 42.1, "vote_count": 3200}
+    ],
+    "xyzzy_no_match_title": [],
+    "xyzzy nonexistent movie": []
+  },
+  "shows": {
+    "stranger things": [
+      {"id": 66732, "name": "Stranger Things", "first_air_date": "2016-07-15", "overview": "When a young boy vanishes, a small town uncovers a mystery involving secret experiments and supernatural forces.", "popularity": 120.5, "vote_count": 14000}
+    ],
+    "wednesday": [
+      {"id": 119051, "name": "Wednesday", "first_air_date": "2022-11-23", "overview": "Wednesday Addams investigates a murder spree while making new friends at Nevermore Academy.", "popularity": 145.2, "vote_count": 8500},
+      {"id": 88234, "name": "Wednesday Morning", "first_air_date": "2019-03-10", "overview": "A morning talk show.", "popularity": 2.1, "vote_count": 30}
+    ],
+    "the witcher": [
+      {"id": 71912, "name": "The Witcher", "first_air_date": "2019-12-20", "overview": "Geralt of Rivia, a solitary monster hunter, struggles to find his place in a world.", "popularity": 98.7, "vote_count": 6500}
+    ],
+    "dark": [
+      {"id": 70523, "name": "Dark", "first_air_date": "2017-12-01", "overview": "A family saga with a supernatural twist, set in a German town where the disappearance of two children exposes relationships among four families.", "popularity": 65.3, "vote_count": 4200}
+    ],
+    "bridgerton": [
+      {"id": 91239, "name": "Bridgerton", "first_air_date": "2020-12-25", "overview": "Wealth, lust, and betrayal set against the backdrop of Regency-era England.", "popularity": 88.9, "vote_count": 5800}
+    ],
+    "american horror story": [
+      {"id": 1413, "name": "American Horror Story", "first_air_date": "2011-10-05", "overview": "An anthology horror drama series.", "popularity": 72.4, "vote_count": 5600}
+    ]
+  },
+  "show_details": {
+    "66732": {"id": 66732, "name": "Stranger Things", "number_of_seasons": 4},
+    "119051": {"id": 119051, "name": "Wednesday", "number_of_seasons": 1},
+    "71912": {"id": 71912, "name": "The Witcher", "number_of_seasons": 3},
+    "70523": {"id": 70523, "name": "Dark", "number_of_seasons": 3},
+    "91239": {"id": 91239, "name": "Bridgerton", "number_of_seasons": 3},
+    "1413": {"id": 1413, "name": "American Horror Story", "number_of_seasons": 12}
+  },
+  "seasons": {
+    "66732_1": {
+      "name": "Season 1", "season_number": 1,
+      "episodes": [
+        {"id": 1171928, "episode_number": 1, "name": "Chapter One: The Vanishing of Will Byers", "air_date": "2016-07-15"},
+        {"id": 1171929, "episode_number": 2, "name": "Chapter Two: The Weirdo on Maple Street", "air_date": "2016-07-15"},
+        {"id": 1171930, "episode_number": 3, "name": "Chapter Three: Holly, Jolly", "air_date": "2016-07-15"},
+        {"id": 1171931, "episode_number": 4, "name": "Chapter Four: The Body", "air_date": "2016-07-15"},
+        {"id": 1171932, "episode_number": 5, "name": "Chapter Five: The Flea and the Acrobat", "air_date": "2016-07-15"},
+        {"id": 1171933, "episode_number": 6, "name": "Chapter Six: The Monster", "air_date": "2016-07-15"},
+        {"id": 1171934, "episode_number": 7, "name": "Chapter Seven: The Bathtub", "air_date": "2016-07-15"},
+        {"id": 1171935, "episode_number": 8, "name": "Chapter Eight: The Upside Down", "air_date": "2016-07-15"}
+      ]
+    },
+    "119051_1": {
+      "name": "Season 1", "season_number": 1,
+      "episodes": [
+        {"id": 3925991, "episode_number": 1, "name": "Wednesday's Child Is Full of Woe", "air_date": "2022-11-23"},
+        {"id": 3925992, "episode_number": 2, "name": "Woe Is the Loneliest Number", "air_date": "2022-11-23"},
+        {"id": 3925993, "episode_number": 3, "name": "Friend or Woe", "air_date": "2022-11-23"},
+        {"id": 3925994, "episode_number": 4, "name": "Woe What a Night", "air_date": "2022-11-23"},
+        {"id": 3925995, "episode_number": 5, "name": "You Reap What You Woe", "air_date": "2022-11-23"},
+        {"id": 3925996, "episode_number": 6, "name": "Quid Pro Woe", "air_date": "2022-11-23"},
+        {"id": 3925997, "episode_number": 7, "name": "If You Don't Woe Me by Now", "air_date": "2022-11-23"},
+        {"id": 3925998, "episode_number": 8, "name": "A Murder of Woes", "air_date": "2022-11-23"}
+      ]
+    },
+    "71912_1": {
+      "name": "Season 1", "season_number": 1,
+      "episodes": [
+        {"id": 1823241, "episode_number": 1, "name": "The End's Beginning", "air_date": "2019-12-20"},
+        {"id": 1823242, "episode_number": 2, "name": "Four Marks", "air_date": "2019-12-20"},
+        {"id": 1823243, "episode_number": 3, "name": "Betrayer Moon", "air_date": "2019-12-20"},
+        {"id": 1823244, "episode_number": 4, "name": "Of Banquets, Bastards and Burials", "air_date": "2019-12-20"},
+        {"id": 1823245, "episode_number": 5, "name": "Bottled Appetites", "air_date": "2019-12-20"},
+        {"id": 1823246, "episode_number": 6, "name": "Rare Species", "air_date": "2019-12-20"},
+        {"id": 1823247, "episode_number": 7, "name": "Before a Fall", "air_date": "2019-12-20"},
+        {"id": 1823248, "episode_number": 8, "name": "Much More", "air_date": "2019-12-20"}
+      ]
+    },
+    "1413_1": {
+      "name": "Murder House", "season_number": 1,
+      "episodes": [
+        {"id": 62085, "episode_number": 1, "name": "Pilot", "air_date": "2011-10-05"},
+        {"id": 62086, "episode_number": 2, "name": "Home Invasion", "air_date": "2011-10-12"},
+        {"id": 62087, "episode_number": 3, "name": "Murder House", "air_date": "2011-10-19"},
+        {"id": 62088, "episode_number": 4, "name": "Halloween: Part 1", "air_date": "2011-10-26"},
+        {"id": 62089, "episode_number": 5, "name": "Halloween: Part 2", "air_date": "2011-11-02"},
+        {"id": 62090, "episode_number": 6, "name": "Piggy Piggy", "air_date": "2011-11-09"},
+        {"id": 62091, "episode_number": 7, "name": "Open House", "air_date": "2011-11-16"},
+        {"id": 62092, "episode_number": 8, "name": "Rubber Man", "air_date": "2011-11-23"},
+        {"id": 62093, "episode_number": 9, "name": "Spooky Little Girl", "air_date": "2011-11-30"},
+        {"id": 62094, "episode_number": 10, "name": "Smoldering Children", "air_date": "2011-12-07"},
+        {"id": 62095, "episode_number": 11, "name": "Birth", "air_date": "2011-12-14"},
+        {"id": 62096, "episode_number": 12, "name": "Afterbirth", "air_date": "2012-01-18"}
+      ]
+    }
+  }
+}
