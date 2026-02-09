@@ -77,6 +77,9 @@ A single consolidated CSV containing everything a human needs to review. Control
 **Columns (in order):**
 `source_file, review_reason, original_row_id, original_confidence, input_title, input_type, confidence, candidate_confidence, status, tmdb_id, media_type, tmdb_url, title_similarity, popularity, popularity_bonus, vote_count, vote_count_bonus, year, genres, stars, released_by, vision_by_label, vision_by, poster_path, candidate_rank, candidate_ids, data_source`
 
+**Key columns:**
+- `original_confidence` — The entity-level confidence score at routing time (before review queue expansion)
+
 **Scoring breakdown per row:**
 - `title_similarity` — How closely the candidate title matches the search query (0–1, from SequenceMatcher)
 - `popularity` — Raw TMDb popularity number
