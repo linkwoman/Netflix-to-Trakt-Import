@@ -35,6 +35,34 @@ A Python CLI tool that imports Netflix viewing history into Trakt.tv. It reads a
 - Refactored netflix2trakt.py to use injected client via factory pattern
 - Added smoke test script (run_smoke_test.py) with sample CSV
 
+## Output Files
+The pipeline produces four CSV files:
+
+- **resolved.csv** — Titles matched with high confidence (auto-accepted, confidence >= 0.80)
+- **needs_review.csv** — Ambiguous matches with multiple candidates (confidence 0.40–0.80)
+- **skipped.csv** — Titles with no TMDb match found
+- **review_queue.csv** — Human review queue (see below)
+
+### Review Queue (`review_queue.csv`)
+A single consolidated CSV containing everything a human needs to review. Controlled by `REVIEW_THRESHOLD = 0.95` in `review_queue.py`.
+
+**What goes in:**
+- **Low-confidence resolved** — Items from resolved.csv with confidence < 0.95 (e.g., "Push" at 0.88). One row each with full metadata.
+- **No match** — Items from skipped.csv with no TMDb candidates found. One row each with blank metadata fields — the human needs to manually look these up.
+- **Ambiguous candidates** — Items from needs_review.csv, expanded to one row per candidate TMDb ID. Each row enriched with full metadata so the human can pick the right one.
+
+**Columns (in order):**
+`source_file, review_reason, original_row_id, original_confidence, input_title, input_type, confidence, status, tmdb_id, media_type, tmdb_url, year, genres, stars, released_by, vision_by_label, vision_by, poster_path, candidate_rank, candidate_ids`
+
+**Enrichment metadata per row:**
+- `tmdb_url` — Direct link to TMDb page
+- `poster_path` — TMDb poster image path
+- `year` — Release year (movie) or first air date year (TV)
+- `genres` — Pipe-separated genre names
+- `stars` — Top 5 cast members, pipe-separated
+- `released_by` — Production companies (movies) or network (TV)
+- `vision_by_label` / `vision_by` — "Directed by" + director name (movies) or "Created by" + creator names (TV)
+
 ## Setup Requirements
 ### Stub Mode (no API keys needed)
 1. Run `python run_smoke_test.py` to test the full pipeline
