@@ -37,6 +37,7 @@ One command produces all outputs. Running `python netflix2trakt.py` (or `python 
 - Errors during processing — Entity goes to failures.csv
 
 ## Recent Changes
+- **best_candidate_title**: Added `best_candidate_title` column to `needs_review.csv` showing the top candidate's title for quick reference (not used downstream)
 - **Orchestration**: Single-command run always produces all CSVs + run_summary.txt + log file
 - **Threshold alignment**: CONFIDENCE_AUTO_ACCEPT raised from 0.80 to 0.95; resolved.csv now contains only high-confidence matches
 - **Logging**: Per-run log file in `logs/` directory with unique run_id; Python logging module with INFO/WARNING/ERROR levels; only short summary printed to stdout
@@ -55,7 +56,7 @@ One command produces all outputs. Running `python netflix2trakt.py` (or `python 
 Every run produces these files:
 
 - **resolved.csv** — Titles matched with confidence >= 0.95 (auto-accepted)
-- **needs_review.csv** — Ambiguous matches (confidence 0.40–0.95)
+- **needs_review.csv** — Ambiguous matches (confidence 0.40–0.95); includes `best_candidate_title` for quick reference
 - **skipped.csv** — Titles with no TMDb match or confidence < 0.40
 - **failures.csv** — Titles that errored during processing
 - **review_queue.csv** — Consolidated human review queue (see below)
