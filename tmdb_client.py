@@ -256,35 +256,44 @@ class StubTMDbClient(TMDbClientBase):
             }
 
 
-def compute_confidence(query, candidates, media_type="movie"):
+def _score_candidate(query_lower, candidate, media_type):
+    if media_type == "movie":
+        candidate_title = candidate.get("title", "").lower()
+    else:
+        candidate_title = candidate.get("name", "").lower()
+
+    similarity = SequenceMatcher(None, query_lower, candidate_title).ratio()
+
+    pop = candidate.get("popularity", 0)
+    pop_bonus = min(pop / 200.0, 0.15)
+
+    votes = candidate.get("vote_count", 0)
+    vote_bonus = min(votes / 50000.0, 0.1)
+
+    score = similarity * 0.75 + pop_bonus + vote_bonus
+    return round(min(score, 1.0), 4)
+
+
+def compute_all_confidences(query, candidates, media_type="movie"):
     if not candidates:
-        return 0.0, None
+        return []
 
-    best_score = 0.0
-    best_candidate = candidates[0]
     query_lower = query.strip().lower()
-
+    scored = []
     for c in candidates:
-        if media_type == "movie":
-            candidate_title = c.get("title", "").lower()
-        else:
-            candidate_title = c.get("name", "").lower()
+        score = _score_candidate(query_lower, c, media_type)
+        scored.append((c, score))
 
-        similarity = SequenceMatcher(None, query_lower, candidate_title).ratio()
+    scored.sort(key=lambda x: x[1], reverse=True)
+    return scored
 
-        pop = c.get("popularity", 0)
-        pop_bonus = min(pop / 200.0, 0.15)
 
-        votes = c.get("vote_count", 0)
-        vote_bonus = min(votes / 50000.0, 0.1)
-
-        score = similarity * 0.75 + pop_bonus + vote_bonus
-
-        if score > best_score:
-            best_score = score
-            best_candidate = c
-
-    return round(min(best_score, 1.0), 4), best_candidate
+def compute_confidence(query, candidates, media_type="movie"):
+    scored = compute_all_confidences(query, candidates, media_type)
+    if not scored:
+        return 0.0, None
+    best_candidate, best_score = scored[0]
+    return best_score, best_candidate
 
 
 def create_tmdb_client(mode, api_key=None, language="en", debug=False):

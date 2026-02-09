@@ -15,7 +15,7 @@ from tqdm import tqdm
 import config
 from NetflixTvShow import NetflixTvHistory
 from TraktIO import TraktIO
-from tmdb_client import create_tmdb_client, compute_confidence
+from tmdb_client import create_tmdb_client, compute_confidence, compute_all_confidences
 from review_queue import generate_review_queue
 
 
@@ -104,17 +104,23 @@ def getShowInformation(show, client, languageSearch, traktIO, reviewRouter=None)
                 reviewRouter.add_skipped(show.name, "tv_show", "No candidates found")
             return
 
-        conf, best = compute_confidence(show.name, tmdbShow, media_type="show")
+        scored = compute_all_confidences(show.name, tmdbShow, media_type="show")
+        if scored:
+            best, conf = scored[0]
+        else:
+            conf, best = 0.0, None
 
         if reviewRouter:
-            candidate_ids = [str(c.get("id", "")) for c in tmdbShow[:5]]
+            top5 = scored[:5]
+            candidate_ids = [str(c.get("id", "")) for c, _ in top5]
+            candidate_confidences = [s for _, s in top5]
             if conf >= CONFIDENCE_AUTO_ACCEPT:
                 reviewRouter.add_resolved(
                     show.name, "tv_show", conf, best.get("id"), best.get("name", "")
                 )
             elif conf >= CONFIDENCE_REVIEW:
                 reviewRouter.add_needs_review(
-                    show.name, "tv_show", conf, candidate_ids, best.get("name", "")
+                    show.name, "tv_show", conf, candidate_ids, candidate_confidences, best.get("name", "")
                 )
             else:
                 reviewRouter.add_skipped(
@@ -247,17 +253,23 @@ def getMovieInformation(movie, strictSync, client, traktIO, reviewRouter=None):
         res = client.search_movie(movie.name)
 
         if res:
-            conf, best = compute_confidence(movie.name, res, media_type="movie")
+            scored = compute_all_confidences(movie.name, res, media_type="movie")
+            if scored:
+                best, conf = scored[0]
+            else:
+                conf, best = 0.0, None
 
             if reviewRouter:
-                candidate_ids = [str(c.get("id", "")) for c in res[:5]]
+                top5 = scored[:5]
+                candidate_ids = [str(c.get("id", "")) for c, _ in top5]
+                candidate_confidences = [s for _, s in top5]
                 if conf >= CONFIDENCE_AUTO_ACCEPT:
                     reviewRouter.add_resolved(
                         movie.name, "movie", conf, best.get("id"), best.get("title", "")
                     )
                 elif conf >= CONFIDENCE_REVIEW:
                     reviewRouter.add_needs_review(
-                        movie.name, "movie", conf, candidate_ids, best.get("title", "")
+                        movie.name, "movie", conf, candidate_ids, candidate_confidences, best.get("title", "")
                     )
                 else:
                     reviewRouter.add_skipped(
@@ -324,8 +336,9 @@ def syncToTrakt(traktIO):
 
 
 class ReviewRouter:
-    def __init__(self, output_dir="."):
+    def __init__(self, output_dir=".", data_source="test"):
         self.output_dir = output_dir
+        self.data_source = data_source
         self._resolved = []
         self._needs_review = []
         self._skipped = []
@@ -345,9 +358,10 @@ class ReviewRouter:
             "confidence": confidence,
             "tmdb_id": tmdb_id,
             "matched_title": matched_title,
+            "data_source": self.data_source,
         })
 
-    def add_needs_review(self, title, media_type, confidence, candidate_ids, best_candidate_title=""):
+    def add_needs_review(self, title, media_type, confidence, candidate_ids, candidate_confidences, best_candidate_title=""):
         self._needs_review.append({
             "original_row_id": self._assign_id(),
             "title": title,
@@ -355,6 +369,8 @@ class ReviewRouter:
             "confidence": confidence,
             "best_candidate_title": best_candidate_title,
             "candidate_ids": ";".join(candidate_ids),
+            "candidate_confidences": ";".join(str(s) for s in candidate_confidences),
+            "data_source": self.data_source,
         })
 
     def add_skipped(self, title, media_type, reason):
@@ -363,6 +379,7 @@ class ReviewRouter:
             "title": title,
             "type": media_type,
             "reason": reason,
+            "data_source": self.data_source,
         })
 
     def add_failure(self, title, media_type, error_msg):
@@ -371,13 +388,14 @@ class ReviewRouter:
             "title": title,
             "type": media_type,
             "error": error_msg,
+            "data_source": self.data_source,
         })
 
     def write_csvs(self):
         resolved_path = os.path.join(self.output_dir, "resolved.csv")
         with open(resolved_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(
-                f, fieldnames=["original_row_id", "title", "type", "confidence", "tmdb_id", "matched_title"]
+                f, fieldnames=["original_row_id", "title", "type", "confidence", "tmdb_id", "matched_title", "data_source"]
             )
             writer.writeheader()
             writer.writerows(self._resolved)
@@ -385,20 +403,20 @@ class ReviewRouter:
         review_path = os.path.join(self.output_dir, "needs_review.csv")
         with open(review_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(
-                f, fieldnames=["original_row_id", "title", "type", "confidence", "best_candidate_title", "candidate_ids"]
+                f, fieldnames=["original_row_id", "title", "type", "confidence", "best_candidate_title", "candidate_ids", "candidate_confidences", "data_source"]
             )
             writer.writeheader()
             writer.writerows(self._needs_review)
 
         skipped_path = os.path.join(self.output_dir, "skipped.csv")
         with open(skipped_path, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=["original_row_id", "title", "type", "reason"])
+            writer = csv.DictWriter(f, fieldnames=["original_row_id", "title", "type", "reason", "data_source"])
             writer.writeheader()
             writer.writerows(self._skipped)
 
         failures_path = os.path.join(self.output_dir, "failures.csv")
         with open(failures_path, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=["original_row_id", "title", "type", "error"])
+            writer = csv.DictWriter(f, fieldnames=["original_row_id", "title", "type", "error", "data_source"])
             writer.writeheader()
             writer.writerows(self._failures)
 
@@ -557,7 +575,8 @@ def main():
     total_entities = total_shows + total_movies
     logging.info(f"Parsed {total_shows} shows and {total_movies} movies ({total_entities} entities) from {input_row_count} CSV rows")
 
-    reviewRouter = ReviewRouter()
+    data_source = "test" if config.TMDB_MODE == "stub" else "live"
+    reviewRouter = ReviewRouter(data_source=data_source)
 
     for show in tqdm(netflixHistory.shows, desc="Finding and adding shows to Trakt.."):
         try:

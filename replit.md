@@ -19,7 +19,7 @@ One command produces all outputs. Running `python netflix2trakt.py` (or `python 
 - **Config**: `config_defaults.ini` (defaults), `config.ini` (user overrides, gitignored)
 - **Key Files**:
   - `netflix2trakt.py` - Main pipeline: parses CSV, matches via TMDb client, confidence scoring, review routing, accounting, run summary, logging setup, syncs to Trakt
-  - `tmdb_client.py` - TMDb client abstraction: `TMDbClientBase` (ABC), `RealTMDbClient` (live API), `StubTMDbClient` (fixture-driven), `compute_confidence()`, `create_tmdb_client()` factory, `get_details_with_credits()` enrichment
+  - `tmdb_client.py` - TMDb client abstraction: `TMDbClientBase` (ABC), `RealTMDbClient` (live API), `StubTMDbClient` (fixture-driven), `compute_confidence()`, `compute_all_confidences()`, `create_tmdb_client()` factory, `get_details_with_credits()` enrichment
   - `review_queue.py` - Generates review_queue.csv: consolidates low-confidence resolved items and ambiguous candidates with full TMDb metadata (poster, cast, director, genres, year, etc.)
   - `TraktIO.py` - Trakt API interaction and authentication
   - `NetflixTvShow.py` - Netflix TV show/movie data models and CSV parsing
@@ -37,6 +37,8 @@ One command produces all outputs. Running `python netflix2trakt.py` (or `python 
 - Errors during processing — Entity goes to failures.csv
 
 ## Recent Changes
+- **candidate_confidence**: Added per-candidate confidence scoring via `compute_all_confidences()`. Candidates sorted by `candidate_confidence` descending; `candidate_rank` assigned from that ordering. Row-level `confidence` = max `candidate_confidence`. `review_queue.csv` includes both `confidence` and `candidate_confidence`.
+- **data_source**: Added `data_source` column to all routing CSVs and `review_queue.csv`. Values: `test` (stub mode) or `live` (real TMDb). Never mixed within a single run.
 - **best_candidate_title**: Added `best_candidate_title` column to `needs_review.csv` showing the top candidate's title for quick reference (not used downstream)
 - **Orchestration**: Single-command run always produces all CSVs + run_summary.txt + log file
 - **Threshold alignment**: CONFIDENCE_AUTO_ACCEPT raised from 0.80 to 0.95; resolved.csv now contains only high-confidence matches
@@ -56,7 +58,7 @@ One command produces all outputs. Running `python netflix2trakt.py` (or `python 
 Every run produces these files:
 
 - **resolved.csv** — Titles matched with confidence >= 0.95 (auto-accepted)
-- **needs_review.csv** — Ambiguous matches (confidence 0.40–0.95); includes `best_candidate_title` for quick reference
+- **needs_review.csv** — Ambiguous matches (confidence 0.40–0.95); includes `best_candidate_title`, `candidate_confidences` (semicolon-separated per candidate), and `data_source`
 - **skipped.csv** — Titles with no TMDb match or confidence < 0.40
 - **failures.csv** — Titles that errored during processing
 - **review_queue.csv** — Consolidated human review queue (see below)
@@ -72,7 +74,7 @@ A single consolidated CSV containing everything a human needs to review. Control
 - **Ambiguous candidates** — Items from needs_review.csv, expanded to one row per candidate TMDb ID. Each row enriched with full metadata so the human can pick the right one.
 
 **Columns (in order):**
-`source_file, review_reason, original_row_id, original_confidence, input_title, input_type, confidence, status, tmdb_id, media_type, tmdb_url, year, genres, stars, released_by, vision_by_label, vision_by, poster_path, candidate_rank, candidate_ids`
+`source_file, review_reason, original_row_id, original_confidence, input_title, input_type, confidence, candidate_confidence, status, tmdb_id, media_type, tmdb_url, year, genres, stars, released_by, vision_by_label, vision_by, poster_path, candidate_rank, candidate_ids, data_source`
 
 **Enrichment metadata per row:**
 - `tmdb_url` — Direct link to TMDb page

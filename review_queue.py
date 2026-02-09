@@ -6,10 +6,10 @@ REVIEW_THRESHOLD = 0.95
 
 COLUMNS = [
     "source_file", "review_reason", "original_row_id", "original_confidence",
-    "input_title", "input_type", "confidence", "status",
+    "input_title", "input_type", "confidence", "candidate_confidence", "status",
     "tmdb_id", "media_type", "tmdb_url",
     "year", "genres", "stars", "released_by", "vision_by_label", "vision_by", "poster_path",
-    "candidate_rank", "candidate_ids",
+    "candidate_rank", "candidate_ids", "data_source",
 ]
 
 
@@ -110,6 +110,7 @@ def generate_review_queue(client, output_dir="."):
                     "input_title": row.get("title", ""),
                     "input_type": input_type,
                     "confidence": conf,
+                    "candidate_confidence": conf,
                     "status": "resolved_low_confidence",
                     "tmdb_id": tmdb_id,
                     "media_type": media_type,
@@ -123,6 +124,7 @@ def generate_review_queue(client, output_dir="."):
                     "poster_path": enrichment["poster_path"],
                     "candidate_rank": 0,
                     "candidate_ids": "",
+                    "data_source": row.get("data_source", ""),
                 })
 
     skipped_path = os.path.join(output_dir, "skipped.csv")
@@ -141,6 +143,7 @@ def generate_review_queue(client, output_dir="."):
                     "input_title": row.get("title", ""),
                     "input_type": input_type,
                     "confidence": 0,
+                    "candidate_confidence": 0,
                     "status": "no_match",
                     "tmdb_id": "",
                     "media_type": media_type,
@@ -154,6 +157,7 @@ def generate_review_queue(client, output_dir="."):
                     "poster_path": "",
                     "candidate_rank": 0,
                     "candidate_ids": "",
+                    "data_source": row.get("data_source", ""),
                 })
 
     if os.path.exists(needs_review_path):
@@ -165,9 +169,13 @@ def generate_review_queue(client, output_dir="."):
                 conf = float(row.get("confidence", 0))
                 candidate_ids_str = row.get("candidate_ids", "")
                 candidate_ids = [cid.strip() for cid in candidate_ids_str.split(";") if cid.strip()]
+                cand_conf_str = row.get("candidate_confidences", "")
+                cand_confs = [float(x.strip()) for x in cand_conf_str.split(";") if x.strip()] if cand_conf_str else []
+                data_source = row.get("data_source", "")
 
                 for rank, cid in enumerate(candidate_ids, start=1):
                     enrichment = _enrich(client, media_type, cid, cache)
+                    cc = cand_confs[rank - 1] if rank - 1 < len(cand_confs) else 0
 
                     rows.append({
                         "source_file": "needs_review.csv",
@@ -177,6 +185,7 @@ def generate_review_queue(client, output_dir="."):
                         "input_title": row.get("title", ""),
                         "input_type": input_type,
                         "confidence": conf,
+                        "candidate_confidence": cc,
                         "status": "candidate",
                         "tmdb_id": cid,
                         "media_type": media_type,
@@ -190,6 +199,7 @@ def generate_review_queue(client, output_dir="."):
                         "poster_path": enrichment["poster_path"],
                         "candidate_rank": rank,
                         "candidate_ids": candidate_ids_str,
+                        "data_source": data_source,
                     })
 
     with open(review_queue_path, "w", newline="", encoding="utf-8") as f:
