@@ -114,7 +114,7 @@ def getShowInformation(show, client, languageSearch, traktIO, reviewRouter=None)
                 )
             elif conf >= CONFIDENCE_REVIEW:
                 reviewRouter.add_needs_review(
-                    show.name, "tv_show", conf, candidate_ids
+                    show.name, "tv_show", conf, candidate_ids, best.get("name", "")
                 )
             else:
                 reviewRouter.add_skipped(
@@ -257,7 +257,7 @@ def getMovieInformation(movie, strictSync, client, traktIO, reviewRouter=None):
                     )
                 elif conf >= CONFIDENCE_REVIEW:
                     reviewRouter.add_needs_review(
-                        movie.name, "movie", conf, candidate_ids
+                        movie.name, "movie", conf, candidate_ids, best.get("title", "")
                     )
                 else:
                     reviewRouter.add_skipped(
@@ -347,12 +347,13 @@ class ReviewRouter:
             "matched_title": matched_title,
         })
 
-    def add_needs_review(self, title, media_type, confidence, candidate_ids):
+    def add_needs_review(self, title, media_type, confidence, candidate_ids, best_candidate_title=""):
         self._needs_review.append({
             "original_row_id": self._assign_id(),
             "title": title,
             "type": media_type,
             "confidence": confidence,
+            "best_candidate_title": best_candidate_title,
             "candidate_ids": ";".join(candidate_ids),
         })
 
@@ -384,7 +385,7 @@ class ReviewRouter:
         review_path = os.path.join(self.output_dir, "needs_review.csv")
         with open(review_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(
-                f, fieldnames=["original_row_id", "title", "type", "confidence", "candidate_ids"]
+                f, fieldnames=["original_row_id", "title", "type", "confidence", "best_candidate_title", "candidate_ids"]
             )
             writer.writeheader()
             writer.writerows(self._needs_review)
