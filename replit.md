@@ -9,17 +9,24 @@ A Python CLI tool that imports Netflix viewing history into Trakt.tv. It reads a
 - **Config**: `config_defaults.ini` (defaults), `config.ini` (user overrides, gitignored)
 - **Key Files**:
   - `netflix2trakt.py` - Main pipeline: parses CSV, matches via TMDb client, confidence scoring, review routing, syncs to Trakt
-  - `tmdb_client.py` - TMDb client abstraction: `TMDbClientBase` (ABC), `RealTMDbClient` (live API), `StubTMDbClient` (fixture-driven), `compute_confidence()`, `create_tmdb_client()` factory
+  - `tmdb_client.py` - TMDb client abstraction: `TMDbClientBase` (ABC), `RealTMDbClient` (live API), `StubTMDbClient` (fixture-driven), `compute_confidence()`, `create_tmdb_client()` factory, `get_details_with_credits()` enrichment
+  - `review_queue.py` - Generates review_queue.csv: consolidates low-confidence resolved items and ambiguous candidates with full TMDb metadata (poster, cast, director, genres, year, etc.)
   - `TraktIO.py` - Trakt API interaction and authentication
   - `NetflixTvShow.py` - Netflix TV show/movie data models and CSV parsing
   - `config.py` - Configuration loader (reads INI files)
   - `run_smoke_test.py` - Smoke test script for stub+dry_run mode
   - `test_NetflixTvShows.py` - Unit tests
   - `history-dates-fixer.py` - Utility to fix date formats in CSV
-  - `fixtures/tmdb_stub.json` - TMDb stub fixture data
+  - `fixtures/tmdb_stub.json` - TMDb stub fixture data + enrichment data (real movie/show metadata for review queue)
   - `fixtures/sample_viewing_history.csv` - Sample Netflix CSV for testing
 
 ## Recent Changes
+- Added review_queue.py: generates review_queue.csv with REVIEW_THRESHOLD=0.95
+  - Low-confidence resolved items (conf < 0.95) get 1 row each with full metadata
+  - Ambiguous items from needs_review.csv get 1 row per candidate ID, expanded with TMDb details+credits
+  - Enrichment uses get_details_with_credits() with in-memory caching
+  - StubTMDbClient returns real movie/show metadata from fixtures (real cast, directors, genres, poster paths)
+  - Columns: source_file, review_reason, original_row_id, original_confidence, input_title, input_type, confidence, status, tmdb_id, media_type, tmdb_url, year, genres, stars, released_by, vision_by_label, vision_by, poster_path, candidate_rank, candidate_ids
 - Added TMDB_MODE config (stub/real) defaulting to stub
 - Changed Trakt dry_run default to True
 - Created TMDb client abstraction layer (tmdb_client.py) with RealTMDbClient and StubTMDbClient

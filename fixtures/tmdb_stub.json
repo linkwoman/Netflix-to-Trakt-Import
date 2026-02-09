@@ -113,5 +113,127 @@
         {"id": 62096, "episode_number": 12, "name": "Afterbirth", "air_date": "2012-01-18"}
       ]
     }
+  },
+  "enrichment": {
+    "movie_17654": {
+      "id": 17654,
+      "title": "Push",
+      "release_date": "2009-02-06",
+      "poster_path": "/bFbhMfKxZmmxSMYFqKBrhVSsaz1.jpg",
+      "genres": [{"name": "Action"}, {"name": "Science Fiction"}, {"name": "Thriller"}],
+      "production_companies": [{"name": "Icon Productions"}, {"name": "Summit Entertainment"}],
+      "credits": {
+        "cast": [
+          {"name": "Chris Evans"},
+          {"name": "Dakota Fanning"},
+          {"name": "Camilla Belle"},
+          {"name": "Djimon Hounsou"},
+          {"name": "Ming-Na Wen"}
+        ],
+        "crew": [
+          {"name": "Paul McGuigan", "job": "Director"},
+          {"name": "David Bourla", "job": "Screenplay"}
+        ]
+      }
+    },
+    "movie_547016": {
+      "id": 547016,
+      "title": "The Old Guard",
+      "release_date": "2020-07-10",
+      "poster_path": "/cjr4NWURcVN3gW5FlHeabgBHLrY.jpg",
+      "genres": [{"name": "Action"}, {"name": "Fantasy"}, {"name": "Adventure"}],
+      "production_companies": [{"name": "Skydance Media"}, {"name": "Denver and Delilah Films"}],
+      "credits": {
+        "cast": [
+          {"name": "Charlize Theron"},
+          {"name": "KiKi Layne"},
+          {"name": "Matthias Schoenaerts"},
+          {"name": "Marwan Kenzari"},
+          {"name": "Luca Marinelli"}
+        ],
+        "crew": [
+          {"name": "Gina Prince-Bythewood", "job": "Director"},
+          {"name": "Greg Rucka", "job": "Screenplay"}
+        ]
+      }
+    },
+    "tv_70523": {
+      "id": 70523,
+      "name": "Dark",
+      "first_air_date": "2017-12-01",
+      "poster_path": "/apbrbWs8M9lyOpJYU5WXrpFbk1Z.jpg",
+      "genres": [{"name": "Drama"}, {"name": "Mystery"}, {"name": "Sci-Fi & Fantasy"}],
+      "networks": [{"name": "Netflix"}],
+      "created_by": [{"name": "Baran bo Odar"}, {"name": "Jantje Friese"}],
+      "credits": {
+        "cast": [
+          {"name": "Louis Hofmann"},
+          {"name": "Oliver Masucci"},
+          {"name": "Jördis Triebel"},
+          {"name": "Maja Schöne"},
+          {"name": "Lisa Vicari"}
+        ],
+        "crew": [
+          {"name": "Baran bo Odar", "job": "Director"}
+        ]
+      }
+    },
+    "tv_828831": {
+      "id": 828831,
+      "name": "Glass Onion",
+      "first_air_date": "2023-03-15",
+      "poster_path": "/lZpWprJqbIFpEV5uoHfoK0KCnTW.jpg",
+      "genres": [{"name": "Reality"}, {"name": "Comedy"}],
+      "networks": [{"name": "Channel 4"}],
+      "created_by": [{"name": "Tom Sherrington"}],
+      "credits": {
+        "cast": [
+          {"name": "Olivia Colman"},
+          {"name": "Idris Elba"},
+          {"name": "Jodie Comer"},
+          {"name": "Andrew Scott"},
+          {"name": "Phoebe Waller-Bridge"}
+        ],
+        "crew": []
+      }
+    },
+    "tv_829831": {
+      "id": 829831,
+      "name": "The Glass House",
+      "first_air_date": "2012-06-18",
+      "poster_path": "/8FRIluihwQPvUFOjH3ouLzYzUGE.jpg",
+      "genres": [{"name": "Reality"}],
+      "networks": [{"name": "ABC"}],
+      "created_by": [{"name": "Kenny Rosen"}],
+      "credits": {
+        "cast": [
+          {"name": "Andy Cohen"},
+          {"name": "Kevin Hart"},
+          {"name": "Jeffrey Welch"},
+          {"name": "Joy Garcia"},
+          {"name": "Andrea Cox"}
+        ],
+        "crew": []
+      }
+    },
+    "tv_830831": {
+      "id": 830831,
+      "name": "Glass",
+      "first_air_date": "2021-09-08",
+      "poster_path": "/svIDTNUoajS8dLEo7EosxvyAsgJ.jpg",
+      "genres": [{"name": "Drama"}, {"name": "Crime"}],
+      "networks": [{"name": "ITV"}],
+      "created_by": [{"name": "Sally Wainwright"}],
+      "credits": {
+        "cast": [
+          {"name": "Sarah Lancashire"},
+          {"name": "Siobhan Finneran"},
+          {"name": "Suranne Jones"},
+          {"name": "James Norton"},
+          {"name": "Nicola Walker"}
+        ],
+        "crew": []
+      }
+    }
   }
 }

@@ -21,6 +21,7 @@ from netflix2trakt import (
     ReviewRouter,
 )
 from tmdb_client import compute_confidence
+from review_queue import generate_review_queue
 from tqdm import tqdm
 import logging
 
@@ -57,12 +58,15 @@ def main():
 
     counts = reviewRouter.write_csvs()
 
+    queue_count = generate_review_queue(client)
+
     print("\n" + "=" * 60)
     print("  RESULTS")
     print("=" * 60)
     print(f"  Resolved (auto-accepted): {counts['resolved']}")
     print(f"  Needs Review (ambiguous):  {counts['needs_review']}")
     print(f"  Skipped (no/low match):    {counts['skipped']}")
+    print(f"  Review Queue:              {queue_count}")
     print()
 
     for csv_name in ["resolved.csv", "needs_review.csv", "skipped.csv"]:
@@ -70,6 +74,11 @@ def main():
             print(f"--- {csv_name} ---")
             with open(csv_name, "r") as f:
                 print(f.read())
+
+    if os.path.exists("review_queue.csv"):
+        print(f"--- review_queue.csv ---")
+        with open("review_queue.csv", "r") as f:
+            print(f.read())
 
     print("Smoke test complete.")
 

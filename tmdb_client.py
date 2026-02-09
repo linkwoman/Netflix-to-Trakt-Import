@@ -45,6 +45,10 @@ class TMDbClientBase(ABC):
     def episode_details(self, tv_id, season_num, episode_num, append_to_response=""):
         pass
 
+    @abstractmethod
+    def get_details_with_credits(self, media_type, tmdb_id):
+        pass
+
 
 class RealTMDbClient(TMDbClientBase):
     def __init__(self, api_key, language="en", debug=False):
@@ -84,6 +88,17 @@ class RealTMDbClient(TMDbClientBase):
             episode_num=episode_num,
             append_to_response=append_to_response,
         )
+
+    def get_details_with_credits(self, media_type, tmdb_id):
+        import requests
+        base = "https://api.themoviedb.org/3"
+        if media_type == "movie":
+            url = f"{base}/movie/{tmdb_id}?append_to_response=credits&api_key={self._tmdb.api_key}"
+        else:
+            url = f"{base}/tv/{tmdb_id}?append_to_response=credits&api_key={self._tmdb.api_key}"
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        return resp.json()
 
 
 class StubTMDbClient(TMDbClientBase):
@@ -202,6 +217,43 @@ class StubTMDbClient(TMDbClientBase):
             "translations": AttrDict({"translations": []}),
         })
         return result
+
+    def get_details_with_credits(self, media_type, tmdb_id):
+        enrichment = self._fixtures.get("enrichment", {})
+        key = f"{media_type}_{tmdb_id}"
+        data = enrichment.get(key, None)
+        if data is not None:
+            return data
+        return self._generate_heuristic_enrichment(media_type, tmdb_id)
+
+    def _generate_heuristic_enrichment(self, media_type, tmdb_id):
+        if media_type == "movie":
+            return {
+                "id": tmdb_id,
+                "title": f"Movie {tmdb_id}",
+                "release_date": "2020-01-01",
+                "poster_path": None,
+                "genres": [{"name": "Drama"}],
+                "production_companies": [{"name": "Unknown Studio"}],
+                "credits": {
+                    "cast": [{"name": "Unknown Actor"}],
+                    "crew": [{"name": "Unknown Director", "job": "Director"}],
+                },
+            }
+        else:
+            return {
+                "id": tmdb_id,
+                "name": f"Show {tmdb_id}",
+                "first_air_date": "2020-01-01",
+                "poster_path": None,
+                "genres": [{"name": "Drama"}],
+                "networks": [{"name": "Unknown Network"}],
+                "created_by": [{"name": "Unknown Creator"}],
+                "credits": {
+                    "cast": [{"name": "Unknown Actor"}],
+                    "crew": [],
+                },
+            }
 
 
 def compute_confidence(query, candidates, media_type="movie"):

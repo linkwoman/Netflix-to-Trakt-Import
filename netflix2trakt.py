@@ -14,6 +14,7 @@ import config
 from NetflixTvShow import NetflixTvHistory
 from TraktIO import TraktIO
 from tmdb_client import create_tmdb_client, compute_confidence
+from review_queue import generate_review_queue
 
 
 CONFIDENCE_AUTO_ACCEPT = 0.80
@@ -392,11 +393,15 @@ def main():
     syncToTrakt(traktIO)
 
     counts = reviewRouter.write_csvs()
+
+    queue_count = generate_review_queue(client)
+
     print(f"\n=== Pipeline Summary ===")
     print(f"  Resolved (auto-accepted): {counts['resolved']}")
     print(f"  Needs Review (ambiguous):  {counts['needs_review']}")
     print(f"  Skipped (no/low match):    {counts['skipped']}")
-    print(f"  Output files: resolved.csv, needs_review.csv, skipped.csv")
+    print(f"  Review Queue:              {queue_count}")
+    print(f"  Output files: resolved.csv, needs_review.csv, skipped.csv, review_queue.csv")
 
 
 if __name__ == "__main__":
