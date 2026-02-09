@@ -1,0 +1,72 @@
+IMPORTANT CONSTRAINT
+Do NOT implement or configure any Replit-specific backend infrastructure (no databases, no auth, no secrets manager, no web services). Treat this as a plain codebase that could run locally; Replit is just the execution environment.
+
+GOAL
+Build a “TMDb stub mode” so I can run and iterate on the Netflix→(match+confidence)→review-queue→Trakt pipeline WITHOUT creating a TMDb API key yet. The stub must create the illusion that TMDb calls worked by returning realistic TMDb-like candidate results. Keep Trakt writes disabled (DRY_RUN) while testing.
+
+WHAT TO DO (TASKS)
+1) Identify how this repo currently calls TMDb:
+   - Find the module(s)/function(s) that perform TMDb searches for movies and TV (and episodes if present).
+   - Note the return shapes those calls provide to the rest of the pipeline.
+
+2) Add configuration flags:
+   - Add a setting (env var or config file) named TMDB_MODE with allowed values: real | stub
+   - Default TMDB_MODE=stub for now (so no TMDb key is required).
+   - Add a DRY_RUN flag for Trakt posting if not already present (default true).
+
+3) Implement a stub TMDb client (no network calls):
+   - Create a “TMDb client” abstraction (interface/class/protocol) that the importer uses, with methods equivalent to the existing TMDb call sites (e.g., search_movie, search_show, search_episode, etc.). Use whatever names the repo already uses—do not invent new ones if an established structure exists.
+   - Implement two versions:
+       a) RealTMDbClient: wraps the existing implementation (even if it remains unused for now).
+       b) StubTMDbClient: returns realistic candidate results from local fixtures and never calls the network.
+
+4) Fixture-driven responses (deterministic):
+   - Add a file like fixtures/tmdb_stub.json (or similar) that maps normalized queries to candidate results.
+   - Key by:
+       - movie title query strings
+       - show title query strings
+       - (optional) show+season+episode for episodes
+   - Ensure the fixture objects include enough fields to simulate real matching:
+       - For movies: id, title, release_date, overview (short), popularity (number), vote_count (number)
+       - For shows: id, name, first_air_date, overview, popularity, vote_count
+       - For episodes: show_id, season_number, episode_number, name, air_date
+   - If a query is not in fixtures, fall back to a heuristic generator that returns 0–5 plausible candidates (so the pipeline keeps flowing).
+
+5) Keep return shapes identical:
+   - The stub must return data in the SAME shape/type the rest of the code currently expects from the real TMDb calls.
+   - Do not change downstream logic beyond swapping in the client dependency.
+
+6) Add confidence scoring + review routing (if not already done):
+   - Ensure that after candidate retrieval, each row ends up in one of:
+       - resolved.csv (auto-accepted)
+       - needs_review.csv (ambiguous)
+       - skipped.csv (no candidates / very low confidence)
+   - Add a confidence column and store candidate IDs in needs_review.csv.
+
+7) Smoke tests:
+   - Generate a tiny sample Netflix ViewingHistory CSV (8–12 rows) matching Netflix export columns (Profile Name, Start Time, Title).
+   - Include:
+       - at least one unambiguous TV episode string (Show: Season X: Episode Y: Episode Title)
+       - at least one ambiguous movie title (so multiple candidates appear)
+       - at least one title that returns zero candidates (to test skipped)
+   - Run the pipeline in TMDB_MODE=stub and DRY_RUN=true.
+   - Show outputs: resolved.csv, needs_review.csv, skipped.csv and a brief summary counts.
+
+HOW THE STUB INTEGRATES (DESIGN RULE)
+- Do NOT scatter “if TMDB_MODE == stub” throughout the code.
+- Centralize the choice at one seam:
+    - Create/locate a single place where the TMDb client is constructed (factory/initializer).
+    - Based on TMDB_MODE, instantiate RealTMDbClient or StubTMDbClient.
+    - Inject/pass that client into the importer pipeline so all TMDb lookups go through it.
+- The rest of the pipeline must treat the client as interchangeable and should not care whether it’s real or stub.
+- If the repo already has a service layer or adapter pattern, follow the existing architecture instead of creating a new one.
+
+DELIVERABLES
+- TMDB_MODE implemented and defaulted to stub.
+- StubTMDbClient + fixtures file added.
+- Pipeline runs end-to-end without TMDb key and produces resolved/needs_review/skipped outputs.
+- DRY_RUN prevents any Trakt writes during testing.
+- Short README update describing:
+    - TMDB_MODE usage
+    - where fixtures live
+    - how to run the sample test
