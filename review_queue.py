@@ -91,7 +91,7 @@ def generate_review_queue(client, output_dir="."):
     if os.path.exists(resolved_path):
         with open(resolved_path, "r", encoding="utf-8") as f:
             reader = csv.DictReader(f)
-            for idx, row in enumerate(reader):
+            for row in reader:
                 conf = float(row.get("confidence", 0))
                 if conf >= REVIEW_THRESHOLD:
                     continue
@@ -105,7 +105,7 @@ def generate_review_queue(client, output_dir="."):
                 rows.append({
                     "source_file": "resolved.csv",
                     "review_reason": "low_confidence_resolved",
-                    "original_row_id": idx,
+                    "original_row_id": row.get("original_row_id", ""),
                     "original_confidence": conf,
                     "input_title": row.get("title", ""),
                     "input_type": input_type,
@@ -129,14 +129,14 @@ def generate_review_queue(client, output_dir="."):
     if os.path.exists(skipped_path):
         with open(skipped_path, "r", encoding="utf-8") as f:
             reader = csv.DictReader(f)
-            for idx, row in enumerate(reader):
+            for row in reader:
                 input_type = row.get("type", "unknown")
                 media_type = _parse_media_type(input_type)
 
                 rows.append({
                     "source_file": "skipped.csv",
                     "review_reason": "no_match",
-                    "original_row_id": idx,
+                    "original_row_id": row.get("original_row_id", ""),
                     "original_confidence": 0,
                     "input_title": row.get("title", ""),
                     "input_type": input_type,
@@ -159,7 +159,7 @@ def generate_review_queue(client, output_dir="."):
     if os.path.exists(needs_review_path):
         with open(needs_review_path, "r", encoding="utf-8") as f:
             reader = csv.DictReader(f)
-            for idx, row in enumerate(reader):
+            for row in reader:
                 input_type = row.get("type", "unknown")
                 media_type = _parse_media_type(input_type)
                 conf = float(row.get("confidence", 0))
@@ -172,7 +172,7 @@ def generate_review_queue(client, output_dir="."):
                     rows.append({
                         "source_file": "needs_review.csv",
                         "review_reason": "ambiguous_candidates",
-                        "original_row_id": idx,
+                        "original_row_id": row.get("original_row_id", ""),
                         "original_confidence": conf,
                         "input_title": row.get("title", ""),
                         "input_type": input_type,

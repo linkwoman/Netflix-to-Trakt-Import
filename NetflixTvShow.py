@@ -5,8 +5,6 @@ from typing import Optional, Set, Union
 
 import config
 
-# Setup logging
-logging.basicConfig(filename=config.LOG_FILENAME, level=config.LOG_LEVEL)
 
 
 # A class that stores all the shows and movies that you have watched on Netflix.

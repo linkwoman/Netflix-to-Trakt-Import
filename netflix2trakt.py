@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 
 import csv
+import datetime
 import logging
 import os
 import re
+import uuid
 from time import sleep
 
 from tenacity import retry, stop_after_attempt, wait_random
@@ -17,8 +19,36 @@ from tmdb_client import create_tmdb_client, compute_confidence
 from review_queue import generate_review_queue
 
 
-CONFIDENCE_AUTO_ACCEPT = 0.80
+CONFIDENCE_AUTO_ACCEPT = 0.95
 CONFIDENCE_REVIEW = 0.40
+
+
+def setup_logging(run_id):
+    logs_dir = "logs"
+    os.makedirs(logs_dir, exist_ok=True)
+    log_path = os.path.join(logs_dir, f"run_{run_id}.log")
+
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)
+
+    for handler in root_logger.handlers[:]:
+        root_logger.removeHandler(handler)
+
+    file_handler = logging.FileHandler(log_path, encoding="utf-8")
+    file_handler.setLevel(logging.DEBUG)
+    file_fmt = logging.Formatter(
+        "%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+    )
+    file_handler.setFormatter(file_fmt)
+    root_logger.addHandler(file_handler)
+
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.WARNING)
+    console_fmt = logging.Formatter("[%(levelname)s] %(message)s")
+    console_handler.setFormatter(console_fmt)
+    root_logger.addHandler(console_handler)
+
+    return log_path
 
 
 def setupTMDB(tmdbMode, tmdbKey, tmdbLanguage, tmdbDebug):
@@ -37,6 +67,7 @@ def setupTrakt(traktPageSize, traktDryRun):
 
 def getNetflixHistory(inputFile, inputFileDelimiter):
     netflixHistory = NetflixTvHistory()
+    row_count = 0
     with open(inputFile, mode="r", encoding="utf-8") as csvFile:
         csvReader = csv.DictReader(
             csvFile, fieldnames=("Title", "Date"), delimiter=inputFileDelimiter
@@ -55,9 +86,10 @@ def getNetflixHistory(inputFile, inputFileDelimiter):
             netflixHistory.addEntry(entry, watchedAt)
 
             line_count += 1
-        logging.info(f"Processed {line_count} lines.")
+            row_count += 1
+        logging.info(f"Processed {line_count} lines ({row_count} data rows).")
 
-    return netflixHistory
+    return netflixHistory, row_count
 
 
 @retry(stop=stop_after_attempt(5), wait=wait_random(min=2, max=10))
@@ -297,9 +329,17 @@ class ReviewRouter:
         self._resolved = []
         self._needs_review = []
         self._skipped = []
+        self._failures = []
+        self._next_id = 1
+
+    def _assign_id(self):
+        row_id = self._next_id
+        self._next_id += 1
+        return row_id
 
     def add_resolved(self, title, media_type, confidence, tmdb_id, matched_title):
         self._resolved.append({
+            "original_row_id": self._assign_id(),
             "title": title,
             "type": media_type,
             "confidence": confidence,
@@ -309,6 +349,7 @@ class ReviewRouter:
 
     def add_needs_review(self, title, media_type, confidence, candidate_ids):
         self._needs_review.append({
+            "original_row_id": self._assign_id(),
             "title": title,
             "type": media_type,
             "confidence": confidence,
@@ -317,16 +358,25 @@ class ReviewRouter:
 
     def add_skipped(self, title, media_type, reason):
         self._skipped.append({
+            "original_row_id": self._assign_id(),
             "title": title,
             "type": media_type,
             "reason": reason,
+        })
+
+    def add_failure(self, title, media_type, error_msg):
+        self._failures.append({
+            "original_row_id": self._assign_id(),
+            "title": title,
+            "type": media_type,
+            "error": error_msg,
         })
 
     def write_csvs(self):
         resolved_path = os.path.join(self.output_dir, "resolved.csv")
         with open(resolved_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(
-                f, fieldnames=["title", "type", "confidence", "tmdb_id", "matched_title"]
+                f, fieldnames=["original_row_id", "title", "type", "confidence", "tmdb_id", "matched_title"]
             )
             writer.writeheader()
             writer.writerows(self._resolved)
@@ -334,21 +384,28 @@ class ReviewRouter:
         review_path = os.path.join(self.output_dir, "needs_review.csv")
         with open(review_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(
-                f, fieldnames=["title", "type", "confidence", "candidate_ids"]
+                f, fieldnames=["original_row_id", "title", "type", "confidence", "candidate_ids"]
             )
             writer.writeheader()
             writer.writerows(self._needs_review)
 
         skipped_path = os.path.join(self.output_dir, "skipped.csv")
         with open(skipped_path, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=["title", "type", "reason"])
+            writer = csv.DictWriter(f, fieldnames=["original_row_id", "title", "type", "reason"])
             writer.writeheader()
             writer.writerows(self._skipped)
+
+        failures_path = os.path.join(self.output_dir, "failures.csv")
+        with open(failures_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=["original_row_id", "title", "type", "error"])
+            writer.writeheader()
+            writer.writerows(self._failures)
 
         return {
             "resolved": len(self._resolved),
             "needs_review": len(self._needs_review),
             "skipped": len(self._skipped),
+            "failures": len(self._failures),
         }
 
     def summary(self):
@@ -356,11 +413,127 @@ class ReviewRouter:
             "resolved": len(self._resolved),
             "needs_review": len(self._needs_review),
             "skipped": len(self._skipped),
+            "failures": len(self._failures),
         }
+
+    def total_routed(self):
+        return (
+            len(self._resolved)
+            + len(self._needs_review)
+            + len(self._skipped)
+            + len(self._failures)
+        )
+
+
+def verify_accounting(total_entities, counts):
+    routed = counts["resolved"] + counts["needs_review"] + counts["skipped"] + counts["failures"]
+    if total_entities != routed:
+        logging.error(
+            f"ACCOUNTING MISMATCH: {total_entities} entities processed but "
+            f"{routed} routed (resolved={counts['resolved']}, "
+            f"needs_review={counts['needs_review']}, skipped={counts['skipped']}, "
+            f"failures={counts['failures']})"
+        )
+        return False
+    logging.info(
+        f"Accounting OK: {total_entities} entities == {routed} routed "
+        f"(resolved={counts['resolved']}, needs_review={counts['needs_review']}, "
+        f"skipped={counts['skipped']}, failures={counts['failures']})"
+    )
+    return True
+
+
+def generate_run_summary(
+    run_id, input_file, input_row_count, tmdb_mode, trakt_dry_run,
+    counts, queue_count, review_reasons, log_path, output_dir="."
+):
+    resolved_n = counts["resolved"]
+    needs_review_n = counts["needs_review"]
+    skipped_n = counts["skipped"]
+    failures_n = counts["failures"]
+
+    paragraph = (
+        f"Processed {input_row_count} Netflix viewing history rows from '{input_file}' "
+        f"in {'stub' if tmdb_mode == 'stub' else 'real'} mode with "
+        f"Trakt dry-run {'enabled' if trakt_dry_run else 'disabled'}. "
+        f"The matcher auto-resolved {resolved_n} items at confidence >= 0.95, "
+        f"flagged {needs_review_n} items for human review due to ambiguity or lower confidence, "
+        f"and skipped {skipped_n} items with no viable TMDb candidates. "
+        f"{failures_n} rows failed due to parsing or enrichment errors"
+        f"{' and were written to failures.csv' if failures_n > 0 else ''}. "
+        f"A consolidated review_queue.csv was generated with enriched metadata "
+        f"for each candidate to support efficient manual review."
+    )
+
+    ambiguous_items = review_reasons.get("ambiguous_candidates", {}).get("items", 0)
+    ambiguous_rows = review_reasons.get("ambiguous_candidates", {}).get("rows", 0)
+    no_match_items = review_reasons.get("no_match", 0)
+    low_conf_items = review_reasons.get("low_confidence_resolved", 0)
+
+    lines = [
+        paragraph,
+        "",
+        f"- Run ID: {run_id}",
+        f"- Mode: TMDb={tmdb_mode}, Trakt dry_run={trakt_dry_run}",
+        f"- Input: {input_file} ({input_row_count} rows)",
+        "- Outputs:",
+        f"  - resolved.csv: {resolved_n} rows (confidence >= 0.95)",
+        f"  - needs_review.csv: {needs_review_n} rows",
+        f"  - skipped.csv: {skipped_n} rows",
+        f"  - failures.csv: {failures_n} rows",
+        f"  - review_queue.csv: {queue_count} rows",
+        "- Review reasons (from review_queue.csv):",
+        f"  - ambiguous_candidates: {ambiguous_items} items / {ambiguous_rows} candidate rows",
+        f"  - no_match: {no_match_items} items",
+        f"  - low_confidence_resolved: {low_conf_items} items",
+        "- Logs:",
+        f"  - {log_path}",
+        "- Next action:",
+        "  - Open review_queue.csv and filter by review_reason to select tmdb_id per original_row_id.",
+    ]
+
+    summary_path = os.path.join(output_dir, "run_summary.txt")
+    with open(summary_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    logging.info(f"Wrote run summary to {summary_path}")
+    return summary_path
+
+
+def count_review_reasons(review_queue_path):
+    reasons = {
+        "ambiguous_candidates": {"items": 0, "rows": 0},
+        "no_match": 0,
+        "low_confidence_resolved": 0,
+    }
+    if not os.path.exists(review_queue_path):
+        return reasons
+
+    seen_ambiguous_titles = set()
+    with open(review_queue_path, "r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            reason = row.get("review_reason", "")
+            if reason == "ambiguous_candidates":
+                reasons["ambiguous_candidates"]["rows"] += 1
+                title_key = row.get("input_title", "")
+                if title_key not in seen_ambiguous_titles:
+                    seen_ambiguous_titles.add(title_key)
+                    reasons["ambiguous_candidates"]["items"] += 1
+            elif reason == "no_match":
+                reasons["no_match"] += 1
+            elif reason == "low_confidence_resolved":
+                reasons["low_confidence_resolved"] += 1
+    return reasons
 
 
 def main():
-    logging.basicConfig(filename=config.LOG_FILENAME, level=config.LOG_LEVEL)
+    run_id = datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:8]
+    log_path = setup_logging(run_id)
+
+    logging.info(f"=== Run {run_id} started ===")
+    logging.info(f"Config: TMDB_MODE={config.TMDB_MODE}, TRAKT_DRY_RUN={config.TRAKT_API_DRY_RUN}")
+    logging.info(f"Input: {config.VIEWING_HISTORY_FILENAME}")
+    logging.info(f"Thresholds: AUTO_ACCEPT={CONFIDENCE_AUTO_ACCEPT}, REVIEW_FLOOR={CONFIDENCE_REVIEW}")
 
     client = setupTMDB(
         config.TMDB_MODE, config.TMDB_API_KEY, config.TMDB_LANGUAGE, config.TMDB_DEBUG
@@ -374,34 +547,74 @@ def main():
     else:
         traktIO.init()
 
-    netflixHistory = getNetflixHistory(
+    netflixHistory, input_row_count = getNetflixHistory(
         config.VIEWING_HISTORY_FILENAME, config.CSV_DELIMITER
     )
+
+    total_shows = len(netflixHistory.shows)
+    total_movies = len(netflixHistory.movies)
+    total_entities = total_shows + total_movies
+    logging.info(f"Parsed {total_shows} shows and {total_movies} movies ({total_entities} entities) from {input_row_count} CSV rows")
 
     reviewRouter = ReviewRouter()
 
     for show in tqdm(netflixHistory.shows, desc="Finding and adding shows to Trakt.."):
-        getShowInformation(
-            show, client, config.TMDB_EPISODE_LANGUAGE_SEARCH, traktIO, reviewRouter
-        )
+        try:
+            getShowInformation(
+                show, client, config.TMDB_EPISODE_LANGUAGE_SEARCH, traktIO, reviewRouter
+            )
+        except Exception as e:
+            logging.error(f"Failed to process show '{show.name}': {e}")
+            reviewRouter.add_failure(show.name, "tv_show", str(e))
 
     for movie in tqdm(
         netflixHistory.movies, desc="Finding and adding movies to Trakt.."
     ):
-        getMovieInformation(movie, config.TMDB_SYNC_STRICT, client, traktIO, reviewRouter)
+        try:
+            getMovieInformation(movie, config.TMDB_SYNC_STRICT, client, traktIO, reviewRouter)
+        except Exception as e:
+            logging.error(f"Failed to process movie '{movie.name}': {e}")
+            reviewRouter.add_failure(movie.name, "movie", str(e))
 
     syncToTrakt(traktIO)
 
     counts = reviewRouter.write_csvs()
+    logging.info(f"Wrote routing CSVs: {counts}")
+
+    accounting_ok = verify_accounting(total_entities, counts)
 
     queue_count = generate_review_queue(client)
+    logging.info(f"Review queue: {queue_count} rows")
 
-    print(f"\n=== Pipeline Summary ===")
-    print(f"  Resolved (auto-accepted): {counts['resolved']}")
-    print(f"  Needs Review (ambiguous):  {counts['needs_review']}")
-    print(f"  Skipped (no/low match):    {counts['skipped']}")
-    print(f"  Review Queue:              {queue_count}")
-    print(f"  Output files: resolved.csv, needs_review.csv, skipped.csv, review_queue.csv")
+    review_reasons = count_review_reasons("review_queue.csv")
+
+    summary_path = generate_run_summary(
+        run_id=run_id,
+        input_file=config.VIEWING_HISTORY_FILENAME,
+        input_row_count=input_row_count,
+        tmdb_mode=config.TMDB_MODE,
+        trakt_dry_run=config.TRAKT_API_DRY_RUN,
+        counts=counts,
+        queue_count=queue_count,
+        review_reasons=review_reasons,
+        log_path=log_path,
+    )
+
+    logging.info(f"=== Run {run_id} completed ===")
+
+    print(f"\n=== Pipeline Complete (run {run_id}) ===")
+    print(f"  Input rows:     {input_row_count}")
+    print(f"  Entities:       {total_entities} (shows={total_shows}, movies={total_movies})")
+    print(f"  Resolved:       {counts['resolved']}")
+    print(f"  Needs Review:   {counts['needs_review']}")
+    print(f"  Skipped:        {counts['skipped']}")
+    print(f"  Failures:       {counts['failures']}")
+    print(f"  Review Queue:   {queue_count}")
+    if not accounting_ok:
+        print(f"  WARNING: Accounting mismatch detected! Check {log_path}")
+    print(f"  Summary:        {summary_path}")
+    print(f"  Log:            {log_path}")
+    print(f"  Outputs: resolved.csv, needs_review.csv, skipped.csv, failures.csv, review_queue.csv")
 
 
 if __name__ == "__main__":

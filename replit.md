@@ -3,12 +3,22 @@
 ## Overview
 A Python CLI tool that imports Netflix viewing history into Trakt.tv. It reads a Netflix CSV export, matches titles against TMDB, and syncs the watch history to a Trakt account. Supports a "stub mode" for testing without API keys.
 
+## Pipeline Flow
+One command produces all outputs. Running `python netflix2trakt.py` (or `python run_smoke_test.py` for stub mode) executes the full pipeline:
+
+1. **Parse** — Reads Netflix CSV, creates show/movie entities
+2. **Match** — Searches TMDb for each entity, scores confidence
+3. **Route** — Sorts entities into resolved / needs_review / skipped / failures CSVs
+4. **Review Queue** — Automatically generates `review_queue.csv` with enriched metadata
+5. **Summary** — Writes `run_summary.txt` and per-run log file to `logs/`
+6. **Accounting** — Asserts every entity is accounted for in exactly one output CSV
+
 ## Project Architecture
 - **Language**: Python 3.10
-- **Entry Point**: `netflix2trakt.py`
+- **Entry Point**: `netflix2trakt.py` (single orchestrated run)
 - **Config**: `config_defaults.ini` (defaults), `config.ini` (user overrides, gitignored)
 - **Key Files**:
-  - `netflix2trakt.py` - Main pipeline: parses CSV, matches via TMDb client, confidence scoring, review routing, syncs to Trakt
+  - `netflix2trakt.py` - Main pipeline: parses CSV, matches via TMDb client, confidence scoring, review routing, accounting, run summary, logging setup, syncs to Trakt
   - `tmdb_client.py` - TMDb client abstraction: `TMDbClientBase` (ABC), `RealTMDbClient` (live API), `StubTMDbClient` (fixture-driven), `compute_confidence()`, `create_tmdb_client()` factory, `get_details_with_credits()` enrichment
   - `review_queue.py` - Generates review_queue.csv: consolidates low-confidence resolved items and ambiguous candidates with full TMDb metadata (poster, cast, director, genres, year, etc.)
   - `TraktIO.py` - Trakt API interaction and authentication
@@ -20,34 +30,43 @@ A Python CLI tool that imports Netflix viewing history into Trakt.tv. It reads a
   - `fixtures/tmdb_stub.json` - TMDb stub fixture data + enrichment data (real movie/show metadata for review queue)
   - `fixtures/sample_viewing_history.csv` - Sample Netflix CSV for testing
 
+## Confidence Thresholds
+- `CONFIDENCE_AUTO_ACCEPT = 0.95` — Entity goes to resolved.csv
+- `CONFIDENCE_REVIEW = 0.40` — Entity goes to needs_review.csv (between 0.40 and 0.95)
+- Below 0.40 or no candidates — Entity goes to skipped.csv
+- Errors during processing — Entity goes to failures.csv
+
 ## Recent Changes
+- **Orchestration**: Single-command run always produces all CSVs + run_summary.txt + log file
+- **Threshold alignment**: CONFIDENCE_AUTO_ACCEPT raised from 0.80 to 0.95; resolved.csv now contains only high-confidence matches
+- **Logging**: Per-run log file in `logs/` directory with unique run_id; Python logging module with INFO/WARNING/ERROR levels; only short summary printed to stdout
+- **Row accounting**: Each entity gets a stable `original_row_id`; `failures.csv` captures errored rows; end-of-run assertion verifies total_entities == resolved + needs_review + skipped + failures
+- **Run summary**: `run_summary.txt` generated every run with paragraph description, bullet-point stats, review reason breakdown, log path, and next action guidance
 - Added review_queue.py: generates review_queue.csv with REVIEW_THRESHOLD=0.95
-  - Low-confidence resolved items (conf < 0.95) get 1 row each with full metadata
-  - Ambiguous items from needs_review.csv get 1 row per candidate ID, expanded with TMDb details+credits
-  - Enrichment uses get_details_with_credits() with in-memory caching
-  - StubTMDbClient returns real movie/show metadata from fixtures (real cast, directors, genres, poster paths)
-  - Columns: source_file, review_reason, original_row_id, original_confidence, input_title, input_type, confidence, status, tmdb_id, media_type, tmdb_url, year, genres, stars, released_by, vision_by_label, vision_by, poster_path, candidate_rank, candidate_ids
 - Added TMDB_MODE config (stub/real) defaulting to stub
 - Changed Trakt dry_run default to True
 - Created TMDb client abstraction layer (tmdb_client.py) with RealTMDbClient and StubTMDbClient
 - Added fixture-driven stub responses (fixtures/tmdb_stub.json)
-- Added confidence scoring and review routing (resolved.csv / needs_review.csv / skipped.csv)
+- Added confidence scoring and review routing
 - Refactored netflix2trakt.py to use injected client via factory pattern
 - Added smoke test script (run_smoke_test.py) with sample CSV
 
 ## Output Files
-The pipeline produces four CSV files:
+Every run produces these files:
 
-- **resolved.csv** — Titles matched with high confidence (auto-accepted, confidence >= 0.80)
-- **needs_review.csv** — Ambiguous matches with multiple candidates (confidence 0.40–0.80)
-- **skipped.csv** — Titles with no TMDb match found
-- **review_queue.csv** — Human review queue (see below)
+- **resolved.csv** — Titles matched with confidence >= 0.95 (auto-accepted)
+- **needs_review.csv** — Ambiguous matches (confidence 0.40–0.95)
+- **skipped.csv** — Titles with no TMDb match or confidence < 0.40
+- **failures.csv** — Titles that errored during processing
+- **review_queue.csv** — Consolidated human review queue (see below)
+- **run_summary.txt** — Human-readable run report (see below)
+- **logs/run_<run_id>.log** — Detailed log file for the run
 
 ### Review Queue (`review_queue.csv`)
 A single consolidated CSV containing everything a human needs to review. Controlled by `REVIEW_THRESHOLD = 0.95` in `review_queue.py`.
 
 **What goes in:**
-- **Low-confidence resolved** — Items from resolved.csv with confidence < 0.95 (e.g., "Push" at 0.88). One row each with full metadata.
+- **Low-confidence resolved** — Items from resolved.csv with confidence < 0.95. One row each with full metadata.
 - **No match** — Items from skipped.csv with no TMDb candidates found. One row each with blank metadata fields — the human needs to manually look these up.
 - **Ambiguous candidates** — Items from needs_review.csv, expanded to one row per candidate TMDb ID. Each row enriched with full metadata so the human can pick the right one.
 
@@ -63,9 +82,17 @@ A single consolidated CSV containing everything a human needs to review. Control
 - `released_by` — Production companies (movies) or network (TV)
 - `vision_by_label` / `vision_by` — "Directed by" + director name (movies) or "Created by" + creator names (TV)
 
+### Run Summary (`run_summary.txt`)
+A human-readable report generated after every run. Contains:
+- **Paragraph** — Prose description of what happened (row count, mode, results)
+- **Bullet points** — Run ID, mode, input/output counts, review reason breakdown, log file path, suggested next action
+
+To interpret: open `run_summary.txt` and check the counts. If `failures.csv` has rows, investigate the log file. If `review_queue.csv` has rows, open it and filter by `review_reason` to decide on each item.
+
 ## Setup Requirements
 ### Stub Mode (no API keys needed)
 1. Run `python run_smoke_test.py` to test the full pipeline
+2. Check outputs: resolved.csv, needs_review.csv, skipped.csv, failures.csv, review_queue.csv, run_summary.txt, logs/
 
 ### Real Mode
 1. Copy `config_defaults.ini` to `config.ini`
@@ -74,6 +101,7 @@ A single consolidated CSV containing everything a human needs to review. Control
 4. Set `dry_run = False` in `[Trakt]` section
 5. Place Netflix viewing history CSV as `NetflixViewingHistory.csv`
 6. Run `python netflix2trakt.py`
+7. Check `run_summary.txt` for results, `review_queue.csv` for items needing human review
 
 ## Dependencies
 Managed via `requirements.txt`. Key libraries: requests, tmdbv3api, trakt.py, arrow, tqdm.

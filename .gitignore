@@ -1,5 +1,7 @@
 *.log
+logs/
 config.ini
+run_summary.txt
 dev/
 .vscode/
 __pycache__
