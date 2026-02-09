@@ -57,10 +57,10 @@ One command produces all outputs. Running `python netflix2trakt.py` (or `python 
 ## Output Files
 Every run produces these files:
 
-- **resolved.csv** — Titles matched with confidence >= 0.95 (auto-accepted)
+- **resolved.csv** — Titles matched with confidence >= 0.95 (auto-accepted); includes `data_source`
 - **needs_review.csv** — Ambiguous matches (confidence 0.40–0.95); includes `best_candidate_title`, `candidate_confidences` (semicolon-separated per candidate), and `data_source`
-- **skipped.csv** — Titles with no TMDb match or confidence < 0.40
-- **failures.csv** — Titles that errored during processing
+- **skipped.csv** — Titles with no TMDb match or confidence < 0.40; includes `data_source`
+- **failures.csv** — Titles that errored during processing; includes `data_source`
 - **review_queue.csv** — Consolidated human review queue (see below)
 - **run_summary.txt** — Human-readable run report (see below)
 - **logs/run_<run_id>.log** — Detailed log file for the run
