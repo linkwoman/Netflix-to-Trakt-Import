@@ -51,12 +51,17 @@ One command produces all outputs. Running `python netflix2trakt.py` (or `python 
   - `traktAuth.json` - OAuth token (also used by CLI)
 
 ## Confidence Thresholds
-- `CONFIDENCE_AUTO_ACCEPT = 0.95` — Entity goes to resolved.csv
-- `CONFIDENCE_REVIEW = 0.40` — Entity goes to needs_review.csv (between 0.40 and 0.95)
+- `CONFIDENCE_AUTO_ACCEPT = 0.90` — Entity goes to resolved.csv
+- `CONFIDENCE_REVIEW = 0.40` — Entity goes to needs_review.csv (between 0.40 and 0.90)
 - Below 0.40 or no candidates — Entity goes to skipped.csv
 - Errors during processing — Entity goes to failures.csv
 
+`REVIEW_THRESHOLD` in `review_queue.py` is also 0.90 — items resolved below this still get pulled into the review queue as "low_confidence_resolved".
+
 ## Recent Changes
+- **Threshold tuning**: Dropped both `CONFIDENCE_AUTO_ACCEPT` and `REVIEW_THRESHOLD` from 0.95 to 0.90. With the previous 0.95 threshold, items with title_similarity=1.0 + capped popularity/vote bonuses still landed at ~0.91, so they fell into needs_review even when the top candidate was clearly correct. 0.90 lets those land in resolved while keeping anything genuinely ambiguous in review.
+- **Bulk-accept top match**: Added a "Accept top match for all" button on the Review page (`POST /api/picks/bulk_accept_top`). For each ambiguous_candidates row that hasn't been manually reviewed, picks the highest-`candidate_confidence` candidate. Existing manual picks/skips are preserved.
+- **Upload UX fix**: Dropzone is now a real `<label>` with the file input absolute-positioned across it (instead of a JS click handler on a hidden input), so the file picker opens reliably inside the Replit preview iframe. Submit button is no longer disabled — server-side validation handles missing files with a flash message.
 - **Web UI**: Added Flask web interface (`app.py`) with drag-drop upload, live progress, results dashboard, visual review queue (poster cards), Trakt OAuth (authorization code flow), one-click sync with dry-run toggle, and per-run history. Pipeline code in `netflix2trakt.py` is reused unchanged via `web_pipeline.py`. CLI continues to work exactly as before.
 - **candidate_title in review_queue.csv**: Added a `candidate_title` column populated from TMDb enrichment so the review UI can show each candidate's actual TMDb title (not just network/year).
 
