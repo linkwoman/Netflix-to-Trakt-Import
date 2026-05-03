@@ -350,6 +350,67 @@ def create_app():
             total=len(groups_list),
         )
 
+    @app.route("/api/picks/bulk_accept_top", methods=["POST"])
+    def api_bulk_accept_top():
+        """For every ambiguous group in the run that hasn't been reviewed yet,
+        accept the top-ranked candidate. Existing picks are left untouched."""
+        data = request.get_json(silent=True) or {}
+        run_id_arg = data.get("run_id") or request.args.get("run_id")
+        base, run_id = _resolve_run_base(run_id_arg)
+        if base is None:
+            return jsonify({"error": "no run available"}), 400
+
+        queue_path = os.path.join(base, "review_queue.csv")
+        if not os.path.exists(queue_path):
+            return jsonify({"error": "no review queue"}), 400
+
+        with open(queue_path, encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+
+        # Pick the top candidate per row (highest candidate_confidence) from
+        # ambiguous_candidates groups only — no_match has nothing to accept.
+        top_by_row = {}
+        for r in rows:
+            if r.get("review_reason") != "ambiguous_candidates":
+                continue
+            if not r.get("tmdb_id"):
+                continue
+            rid = r["original_row_id"]
+            try:
+                conf = float(r.get("candidate_confidence") or 0)
+            except ValueError:
+                conf = 0.0
+            cur = top_by_row.get(rid)
+            if cur is None or conf > cur["conf"]:
+                top_by_row[rid] = {
+                    "conf": conf,
+                    "tmdb_id": r["tmdb_id"],
+                    "media_type": r.get("media_type") or "",
+                }
+
+        picks = web_sync.load_picks(run_id)
+        added = 0
+        for rid, top in top_by_row.items():
+            if rid in picks:
+                continue  # don't overwrite manual picks/skips
+            picks[rid] = {
+                "action": "accept",
+                "tmdb_id": top["tmdb_id"],
+                "media_type": top["media_type"],
+            }
+            added += 1
+
+        web_sync.save_picks(run_id, picks)
+        return jsonify(
+            {
+                "ok": True,
+                "accepted": added,
+                "skipped_existing": len(top_by_row) - added,
+                "picks_count": len(picks),
+                "run_id": run_id,
+            }
+        )
+
     @app.route("/api/picks", methods=["POST"])
     def api_save_pick():
         data = request.get_json(force=True)

@@ -7,6 +7,16 @@
   <div class="muted">{{ groups|length }} item{{ '' if groups|length == 1 else 's' }} need your eyes</div>
 </div>
 
+{% if groups %}
+<section class="card" style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+  <div>
+    <strong>Lots to review?</strong>
+    <div class="muted small">Auto-accept the top-ranked candidate for every ambiguous row that hasn't been touched yet. You can still clear individual picks afterwards.</div>
+  </div>
+  <button class="btn btn-primary" id="bulk-accept-btn" type="button">Accept top match for all</button>
+</section>
+{% endif %}
+
 {% if not groups %}
 <section class="card">
   <p>Nothing to review — everything matched cleanly.</p>
@@ -154,5 +164,29 @@
   });
 
   refreshCount();
+
+  const bulkBtn = document.getElementById('bulk-accept-btn');
+  if (bulkBtn) {
+    bulkBtn.addEventListener('click', async () => {
+      if (!confirm('Auto-accept the top match for every ambiguous row that has not been reviewed yet?')) return;
+      bulkBtn.disabled = true;
+      bulkBtn.textContent = 'Accepting…';
+      try {
+        const resp = await fetch('/api/picks/bulk_accept_top', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ run_id: RUN_ID })
+        });
+        const body = await resp.json();
+        if (!resp.ok) throw new Error(body.error || 'failed');
+        alert(`Accepted top match for ${body.accepted} row(s). Reloading…`);
+        window.location.reload();
+      } catch (e) {
+        alert('Bulk-accept failed: ' + e.message);
+        bulkBtn.disabled = false;
+        bulkBtn.textContent = 'Accept top match for all';
+      }
+    });
+  }
 </script>
 {% endblock %}
