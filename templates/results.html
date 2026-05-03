@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}Results · netflix2trakt{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1>Results{% if run_id %} <span class="muted small">— {{ run_id }}</span>{% endif %}</h1>
+  <div class="cta-row">
+    {% if needs_review %}
+    <a class="btn btn-primary" href="{{ url_for('review_page', run_id=run_id) if run_id else url_for('review_page') }}">
+      Review {{ needs_review|length }} ambiguous
+    </a>
+    {% endif %}
+    <a class="btn btn-secondary" href="{{ url_for('sync_page') }}">Go to sync →</a>
+  </div>
+</div>
+
+<section class="stats-grid">
+  <div class="stat stat-ok">
+    <div class="stat-num">{{ resolved|length }}</div>
+    <div class="stat-label">Resolved</div>
+  </div>
+  <div class="stat stat-warn">
+    <div class="stat-num">{{ needs_review|length }}</div>
+    <div class="stat-label">Needs review</div>
+  </div>
+  <div class="stat stat-muted">
+    <div class="stat-num">{{ skipped|length }}</div>
+    <div class="stat-label">Skipped</div>
+  </div>
+  <div class="stat stat-bad">
+    <div class="stat-num">{{ failures|length }}</div>
+    <div class="stat-label">Failures</div>
+  </div>
+</section>
+
+{% if summary %}
+<section class="card">
+  <h2>Run summary</h2>
+  <pre class="summary-pre">{{ summary }}</pre>
+</section>
+{% endif %}
+
+<section class="card">
+  <div class="tabs">
+    <button class="tab is-active" data-tab="resolved">Resolved ({{ resolved|length }})</button>
+    <button class="tab" data-tab="needs_review">Needs review ({{ needs_review|length }})</button>
+    <button class="tab" data-tab="skipped">Skipped ({{ skipped|length }})</button>
+    <button class="tab" data-tab="failures">Failures ({{ failures|length }})</button>
+  </div>
+
+  <div class="tab-panel" data-panel="resolved">
+    <table class="data">
+      <thead><tr><th>#</th><th>Title</th><th>Type</th><th>Confidence</th><th>TMDb</th><th>Matched</th></tr></thead>
+      <tbody>
+        {% for r in resolved %}
+        <tr>
+          <td class="muted small">{{ r.original_row_id }}</td>
+          <td>{{ r.title }}</td>
+          <td>{{ r.type }}</td>
+          <td>{{ "%.3f"|format(r.confidence|float) }}</td>
+          <td><a href="https://www.themoviedb.org/{{ 'movie' if r.type == 'movie' else 'tv' }}/{{ r.tmdb_id }}" target="_blank">{{ r.tmdb_id }}</a></td>
+          <td>{{ r.matched_title }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="tab-panel" data-panel="needs_review" hidden>
+    <table class="data">
+      <thead><tr><th>#</th><th>Title</th><th>Type</th><th>Top confidence</th><th>Best candidate</th></tr></thead>
+      <tbody>
+        {% for r in needs_review %}
+        <tr>
+          <td class="muted small">{{ r.original_row_id }}</td>
+          <td>{{ r.title }}</td>
+          <td>{{ r.type }}</td>
+          <td>{{ "%.3f"|format(r.confidence|float) }}</td>
+          <td>{{ r.best_candidate_title }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="tab-panel" data-panel="skipped" hidden>
+    <table class="data">
+      <thead><tr><th>#</th><th>Title</th><th>Type</th><th>Reason</th></tr></thead>
+      <tbody>
+        {% for r in skipped %}
+        <tr><td class="muted small">{{ r.original_row_id }}</td><td>{{ r.title }}</td><td>{{ r.type }}</td><td>{{ r.reason }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="tab-panel" data-panel="failures" hidden>
+    <table class="data">
+      <thead><tr><th>#</th><th>Title</th><th>Type</th><th>Error</th></tr></thead>
+      <tbody>
+        {% for r in failures %}
+        <tr><td class="muted small">{{ r.original_row_id }}</td><td>{{ r.title }}</td><td>{{ r.type }}</td><td class="error-text">{{ r.error }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(x => x.classList.remove('is-active'));
+      t.classList.add('is-active');
+      document.querySelectorAll('.tab-panel').forEach(p => p.hidden = true);
+      document.querySelector(`[data-panel="${t.dataset.tab}"]`).hidden = false;
+    });
+  });
+</script>
+{% endblock %}

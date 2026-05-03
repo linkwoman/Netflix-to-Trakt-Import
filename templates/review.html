@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block title %}Review · netflix2trakt{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1>Review queue</h1>
+  <div class="muted">{{ groups|length }} item{{ '' if groups|length == 1 else 's' }} need your eyes</div>
+</div>
+
+{% if not groups %}
+<section class="card">
+  <p>Nothing to review — everything matched cleanly.</p>
+  <a class="btn btn-primary" href="{{ url_for('sync_page') }}">Continue to sync →</a>
+</section>
+{% endif %}
+
+{% for g in groups %}
+<section class="review-item card" data-row-id="{{ g.original_row_id }}">
+  <div class="review-head">
+    <div>
+      <div class="review-input">
+        <span class="muted small">#{{ g.original_row_id }} · Netflix said:</span>
+        <h2>{{ g.input_title }}</h2>
+        <span class="pill pill-muted">{{ g.input_type }}</span>
+        <span class="pill pill-{% if g.review_reason == 'no_match' %}off{% else %}warn{% endif %}">{{ g.review_reason }}</span>
+      </div>
+    </div>
+    <div class="review-status muted small" data-status>
+      {% set p = picks.get(g.original_row_id) %}
+      {% if p and p.action == 'accept' %}<span class="pill pill-ok">picked: {{ p.tmdb_id }}</span>
+      {% elif p and p.action == 'skip' %}<span class="pill pill-off">skipped</span>
+      {% else %}<span class="muted small">not yet reviewed</span>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if g.candidates %}
+    <div class="candidates">
+      {% for c in g.candidates %}
+      <div class="candidate-card" data-tmdb-id="{{ c.tmdb_id }}" data-media-type="{{ c.media_type }}">
+        {% if c.poster_path %}
+          <img class="poster" src="https://image.tmdb.org/t/p/w185{{ c.poster_path }}" alt="">
+        {% else %}
+          <div class="poster poster-empty">no poster</div>
+        {% endif %}
+        <div class="candidate-body">
+          <h3 class="candidate-title">
+            <a href="{{ c.tmdb_url }}" target="_blank" rel="noopener">{{ c.candidate_title or c.input_title }}</a>
+            {% if c.year %}<span class="muted">({{ c.year }})</span>{% endif %}
+          </h3>
+          <div class="candidate-meta">
+            <span class="pill pill-muted">conf {{ "%.3f"|format(c.candidate_confidence|float) }}</span>
+            <span class="muted small">{{ c.media_type }}</span>
+            {% if c.genres %}<span class="muted small">· {{ c.genres }}</span>{% endif %}
+          </div>
+          {% if c.released_by %}<div class="muted small"><strong>{{ 'Network' if c.media_type == 'tv' else 'Studio' }}:</strong> {{ c.released_by }}</div>{% endif %}
+          {% if c.stars %}<div class="muted small"><strong>Stars:</strong> {{ c.stars }}</div>{% endif %}
+          {% if c.vision_by %}<div class="muted small"><strong>{{ c.vision_by_label }}:</strong> {{ c.vision_by }}</div>{% endif %}
+          <details class="scoring">
+            <summary class="muted small">Scoring breakdown</summary>
+            <div class="muted small">
+              title_similarity: {{ c.title_similarity }} ·
+              popularity: {{ c.popularity }} (+{{ c.popularity_bonus }}) ·
+              vote_count: {{ c.vote_count }} (+{{ c.vote_count_bonus }})
+            </div>
+          </details>
+          <div class="candidate-actions">
+            <button class="btn btn-primary btn-small" data-action="accept">Pick this</button>
+            <a class="btn btn-secondary btn-small" href="{{ c.tmdb_url }}" target="_blank">Open TMDb ↗</a>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="muted">No TMDb candidates were found for this title. Search manually:</p>
+    <a class="btn btn-secondary" target="_blank" rel="noopener"
+       href="https://www.themoviedb.org/search?query={{ g.input_title|urlencode }}">
+      Search TMDb for "{{ g.input_title }}" ↗
+    </a>
+  {% endif %}
+
+  <div class="review-actions">
+    <button class="btn btn-ghost btn-small" data-action="skip">Skip this title</button>
+    <button class="btn btn-ghost btn-small" data-action="clear">Clear pick</button>
+  </div>
+</section>
+{% endfor %}
+
+{% if groups %}
+<div class="sticky-bar">
+  <div class="container">
+    <span id="picks-count">— of {{ groups|length }} reviewed</span>
+    <a class="btn btn-primary" href="{{ url_for('sync_page') }}">Continue to sync →</a>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function updateStatus(itemEl, label, klass) {
+    const s = itemEl.querySelector('[data-status]');
+    s.innerHTML = `<span class="pill ${klass}">${label}</span>`;
+  }
+
+  const RUN_ID = {{ (run_id or '')|tojson }};
+  async function savePick(rowId, body) {
+    const resp = await fetch('/api/picks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ original_row_id: rowId, run_id: RUN_ID, ...body })
+    });
+    return resp.json();
+  }
+
+  function refreshCount() {
+    const total = {{ groups|length }};
+    const reviewed = document.querySelectorAll('.review-item .pill-ok, .review-item .pill-off').length;
+    const el = document.getElementById('picks-count');
+    if (el) el.textContent = `${reviewed} of ${total} reviewed`;
+  }
+
+  document.querySelectorAll('.review-item').forEach(item => {
+    const rowId = item.dataset.rowId;
+
+    item.querySelectorAll('.candidate-card').forEach(card => {
+      card.querySelector('[data-action="accept"]').addEventListener('click', async () => {
+        const tmdb_id = card.dataset.tmdbId;
+        const media_type = card.dataset.mediaType;
+        await savePick(rowId, { action: 'accept', tmdb_id, media_type });
+        updateStatus(item, `picked: ${tmdb_id}`, 'pill-ok');
+        item.querySelectorAll('.candidate-card').forEach(c => c.classList.remove('is-picked'));
+        card.classList.add('is-picked');
+        refreshCount();
+      });
+    });
+
+    const skipBtn = item.querySelector('[data-action="skip"]');
+    if (skipBtn) skipBtn.addEventListener('click', async () => {
+      await savePick(rowId, { action: 'skip' });
+      updateStatus(item, 'skipped', 'pill-off');
+      refreshCount();
+    });
+
+    const clearBtn = item.querySelector('[data-action="clear"]');
+    if (clearBtn) clearBtn.addEventListener('click', async () => {
+      await savePick(rowId, { action: 'clear' });
+      updateStatus(item, 'not yet reviewed', 'pill-muted');
+      item.querySelectorAll('.candidate-card').forEach(c => c.classList.remove('is-picked'));
+      refreshCount();
+    });
+  });
+
+  refreshCount();
+</script>
+{% endblock %}

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Sync result · netflix2trakt{% endblock %}
+{% block content %}
+
+<h1>{% if dry_run %}Dry run complete{% else %}Sync complete{% endif %}</h1>
+
+<section class="card">
+  {% if dry_run %}
+    <div class="flash flash-info">
+      This was a dry run — nothing was actually sent to Trakt. Uncheck "Dry run" on the sync page to push for real.
+    </div>
+  {% else %}
+    <div class="flash flash-success">Pushed to Trakt successfully.</div>
+  {% endif %}
+
+  <h2>Summary</h2>
+  <div class="stats-grid">
+    <div class="stat stat-ok"><div class="stat-num">{{ result.added.movies or 0 }}</div><div class="stat-label">Movies added</div></div>
+    <div class="stat stat-ok"><div class="stat-num">{{ result.added.shows or result.added.episodes or 0 }}</div><div class="stat-label">Shows / episodes added</div></div>
+  </div>
+
+  {% if result.trakt_response %}
+  <h3>Trakt response</h3>
+  <pre class="summary-pre">{{ result.trakt_response | tojson(indent=2) }}</pre>
+  {% endif %}
+
+  <div class="cta-row">
+    <a class="btn btn-secondary" href="{{ url_for('history_page') }}">View history</a>
+    <a class="btn btn-primary" href="{{ url_for('upload_page') }}">Run another import</a>
+  </div>
+</section>
+
+{% endblock %}

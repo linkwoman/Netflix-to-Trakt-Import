@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}History · netflix2trakt{% endblock %}
+{% block content %}
+
+<h1>Past runs</h1>
+
+{% if not runs %}
+<section class="card">
+  <p class="muted">No runs yet.</p>
+  <a class="btn btn-primary" href="{{ url_for('upload_page') }}">Start an import</a>
+</section>
+{% else %}
+<section class="card">
+  <table class="data">
+    <thead>
+      <tr>
+        <th>When</th>
+        <th>Run ID</th>
+        <th>Mode</th>
+        <th>Input</th>
+        <th>Resolved</th>
+        <th>Review</th>
+        <th>Skipped</th>
+        <th>Failures</th>
+        <th>Files</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in runs %}
+      <tr>
+        <td class="muted small">{{ r.created_at[:19].replace('T', ' ') }}</td>
+        <td><code>{{ r.run_id }}</code></td>
+        <td><span class="pill pill-{% if r.mode == 'stub' %}stub{% else %}live{% endif %}">{{ r.mode }}</span></td>
+        <td>{{ r.input_file }}<br><span class="muted small">{{ r.input_row_count }} rows</span></td>
+        <td><strong class="text-ok">{{ r.counts.resolved }}</strong></td>
+        <td><strong class="text-warn">{{ r.counts.needs_review }}</strong></td>
+        <td>{{ r.counts.skipped }}</td>
+        <td><strong class="{% if r.counts.failures %}text-bad{% endif %}">{{ r.counts.failures }}</strong></td>
+        <td class="downloads">
+          <a href="{{ url_for('results_page', run_id=r.run_id) }}">view</a> ·
+          <a href="{{ url_for('download_run_file', run_id=r.run_id, filename='resolved.csv') }}">resolved</a> ·
+          <a href="{{ url_for('download_run_file', run_id=r.run_id, filename='review_queue.csv') }}">review</a> ·
+          <a href="{{ url_for('download_run_file', run_id=r.run_id, filename='run_summary.txt') }}">summary</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+{% endblock %}

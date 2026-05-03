@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Settings · netflix2trakt{% endblock %}
+{% block content %}
+
+<h1>Settings</h1>
+
+<section class="card">
+  <h2>Mode</h2>
+  <form method="post">
+    <div class="field-row">
+      <label class="radio-card">
+        <input type="radio" name="tmdb_mode" value="stub" {% if s.tmdb_mode == 'stub' %}checked{% endif %}>
+        <div>
+          <div class="strong">Stub mode</div>
+          <div class="muted small">Test the full pipeline using local fixtures. No API keys needed.</div>
+        </div>
+      </label>
+      <label class="radio-card">
+        <input type="radio" name="tmdb_mode" value="real" {% if s.tmdb_mode == 'real' %}checked{% endif %}>
+        <div>
+          <div class="strong">Real mode</div>
+          <div class="muted small">Hit the real TMDb API. Needs a free TMDb API key.</div>
+        </div>
+      </label>
+    </div>
+
+    <h2>TMDb API</h2>
+    <p class="muted small">Get a free key at
+      <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener">themoviedb.org/settings/api</a>.
+    </p>
+    <label class="field">
+      <span>TMDb API Key (v3)</span>
+      <input type="text" name="tmdb_api_key"
+             placeholder="{% if s.tmdb_api_key_masked %}{{ s.tmdb_api_key_masked }}{% else %}paste your key{% endif %}">
+      <span class="hint">{% if s.tmdb_api_key_masked %}Currently set to {{ s.tmdb_api_key_masked }}. Leave empty to keep.{% endif %}</span>
+    </label>
+    <label class="field">
+      <span>Language</span>
+      <input type="text" name="tmdb_language" value="{{ s.tmdb_language }}" maxlength="5" style="max-width: 8em;">
+    </label>
+
+    <h2>Trakt application</h2>
+    <p class="muted small">
+      Create a Trakt app at
+      <a href="https://trakt.tv/oauth/applications" target="_blank" rel="noopener">trakt.tv/oauth/applications</a>.
+      For the <strong>Redirect URI</strong>, use this exact value:
+    </p>
+    <div class="callout">
+      <code class="copyable">{{ redirect_uri }}</code>
+    </div>
+
+    <label class="field">
+      <span>Client ID</span>
+      <input type="text" name="trakt_client_id"
+             placeholder="{% if s.trakt_client_id and s.trakt_client_id != 'None' %}{{ s.trakt_client_id }}{% else %}paste client id{% endif %}">
+    </label>
+    <label class="field">
+      <span>Client Secret</span>
+      <input type="password" name="trakt_client_secret"
+             placeholder="{% if s.trakt_client_secret_masked %}{{ s.trakt_client_secret_masked }}{% else %}paste client secret{% endif %}">
+      <span class="hint">{% if s.trakt_client_secret_masked %}Already set. Leave empty to keep.{% endif %}</span>
+    </label>
+
+    <label class="checkbox-row">
+      <input type="checkbox" name="trakt_dry_run" {% if s.trakt_dry_run %}checked{% endif %}>
+      <span>Default to dry-run when syncing (recommended for first runs)</span>
+    </label>
+
+    <div class="cta-row">
+      <button class="btn btn-primary" type="submit">Save settings</button>
+    </div>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Trakt connection</h2>
+  {% if trakt_status.connected %}
+    <p>
+      <span class="pill pill-ok">Connected{% if trakt_status.username %} as {{ trakt_status.username }}{% endif %}</span>
+    </p>
+    <form method="post" action="{{ url_for('auth_disconnect') }}">
+      <button class="btn btn-secondary" type="submit">Disconnect</button>
+    </form>
+  {% else %}
+    <p class="muted">Not connected to Trakt. Save your Client ID & Secret above first, then connect.</p>
+    <a class="btn btn-primary" href="{{ url_for('auth_connect') }}">Connect Trakt</a>
+  {% endif %}
+</section>
+
+{% endblock %}

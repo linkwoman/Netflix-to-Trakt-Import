@@ -1,7 +1,11 @@
 # netflix2trakt
 
 ## Overview
-A Python CLI tool that imports Netflix viewing history into Trakt.tv. It reads a Netflix CSV export, matches titles against TMDB, and syncs the watch history to a Trakt account. Supports a "stub mode" for testing without API keys.
+A Python tool that imports Netflix viewing history into Trakt.tv. It reads a Netflix CSV export, matches titles against TMDB, and syncs the watch history to a Trakt account. Supports a "stub mode" for testing without API keys.
+
+Available as **two interfaces** sharing the same pipeline code:
+- **Web UI** (`python app.py`) — Flask app on port 5000 with drag-drop upload, OAuth, visual review queue, sync.
+- **CLI** (`python netflix2trakt.py` or `python run_smoke_test.py`) — original command-line entry points, unchanged.
 
 ## Pipeline Flow
 One command produces all outputs. Running `python netflix2trakt.py` (or `python run_smoke_test.py` for stub mode) executes the full pipeline:
@@ -15,7 +19,8 @@ One command produces all outputs. Running `python netflix2trakt.py` (or `python 
 
 ## Project Architecture
 - **Language**: Python 3.10
-- **Entry Point**: `netflix2trakt.py` (single orchestrated run)
+- **Web Entry Point**: `app.py` (Flask, port 5000) — primary user interface
+- **CLI Entry Point**: `netflix2trakt.py` (single orchestrated run)
 - **Config**: `config_defaults.ini` (defaults), `config.ini` (user overrides, gitignored)
 - **Key Files**:
   - `netflix2trakt.py` - Main pipeline: parses CSV, matches via TMDb client, confidence scoring, review routing, accounting, run summary, logging setup, syncs to Trakt
@@ -30,6 +35,21 @@ One command produces all outputs. Running `python netflix2trakt.py` (or `python 
   - `fixtures/tmdb_stub.json` - TMDb stub fixture data + enrichment data (real movie/show metadata for review queue)
   - `fixtures/sample_viewing_history.csv` - Sample Netflix CSV for testing
 
+### Web UI files
+  - `app.py` - Flask app: routes for `/`, `/settings`, `/upload`, `/processing/<id>`, `/api/jobs/<id>`, `/results`, `/review`, `/api/picks`, `/sync`, `/history`, `/run/<id>/<file>`, `/auth/connect`, `/auth/callback`, `/auth/disconnect`. Background pipeline jobs run in threads, tracked in an in-memory dict.
+  - `web_pipeline.py` - `run_pipeline()` wraps the existing CLI functions (parse → match → route → review queue → summary) with a progress callback. Snapshots all outputs to `runs/<run_id>/`.
+  - `web_oauth.py` - Trakt authorization-code OAuth flow (web-friendly), saves token to `traktAuth.json`.
+  - `web_sync.py` - Builds sync payload from `resolved.csv` + `review_picks.json`, posts to Trakt `/sync/history`. Honors a dry-run toggle.
+  - `web_config.py` - Read/write `config.ini` for the settings page.
+  - `templates/` - Jinja templates: `base.html`, `index.html`, `settings.html`, `upload.html`, `processing.html`, `results.html`, `review.html`, `sync.html`, `sync_result.html`, `history.html`.
+  - `static/style.css` - Self-contained styles (no framework).
+
+### Web UI runtime files (gitignored)
+  - `uploads/` - Temporary location for uploaded CSVs
+  - `runs/<run_id>/` - Per-run snapshots of all outputs + `metadata.json`
+  - `review_picks.json` - User's review queue picks (which TMDb candidate to accept per row)
+  - `traktAuth.json` - OAuth token (also used by CLI)
+
 ## Confidence Thresholds
 - `CONFIDENCE_AUTO_ACCEPT = 0.95` — Entity goes to resolved.csv
 - `CONFIDENCE_REVIEW = 0.40` — Entity goes to needs_review.csv (between 0.40 and 0.95)
@@ -37,6 +57,9 @@ One command produces all outputs. Running `python netflix2trakt.py` (or `python 
 - Errors during processing — Entity goes to failures.csv
 
 ## Recent Changes
+- **Web UI**: Added Flask web interface (`app.py`) with drag-drop upload, live progress, results dashboard, visual review queue (poster cards), Trakt OAuth (authorization code flow), one-click sync with dry-run toggle, and per-run history. Pipeline code in `netflix2trakt.py` is reused unchanged via `web_pipeline.py`. CLI continues to work exactly as before.
+- **candidate_title in review_queue.csv**: Added a `candidate_title` column populated from TMDb enrichment so the review UI can show each candidate's actual TMDb title (not just network/year).
+
 - **scoring_breakdown**: Added 5 scoring component columns (`title_similarity`, `popularity`, `popularity_bonus`, `vote_count`, `vote_count_bonus`) to `review_queue.csv`, `resolved.csv`, and `needs_review.csv`. Shows the full breakdown of how each candidate's confidence score was computed. In `needs_review.csv`, components are stored as semicolon-separated values per candidate (e.g., `candidate_title_similarities`, `candidate_popularities`, etc.).
 - **candidate_confidence**: Added per-candidate confidence scoring via `compute_all_confidences()`. Candidates sorted by `candidate_confidence` descending; `candidate_rank` assigned from that ordering. Row-level `confidence` = max `candidate_confidence`. `review_queue.csv` includes both `confidence` and `candidate_confidence`.
 - **data_source**: Added `data_source` column to all routing CSVs and `review_queue.csv`. Values: `test` (stub mode) or `live` (real TMDb). Never mixed within a single run.

@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}netflix2trakt — home{% endblock %}
+{% block content %}
+
+<section class="hero">
+  <h1>Import your Netflix history into Trakt.</h1>
+  <p class="lead">
+    Upload your Netflix CSV. We'll match each title against TMDb, flag the fuzzy ones for your review,
+    and push everything to Trakt with one click.
+  </p>
+  <div class="cta-row">
+    <a class="btn btn-primary" href="{{ url_for('upload_page') }}">Start an import</a>
+    <a class="btn btn-secondary" href="{{ url_for('settings_page') }}">Settings</a>
+  </div>
+</section>
+
+{% if latest_run %}
+<section class="card">
+  <h2>Latest run</h2>
+  <p class="muted small">
+    {{ latest_run.created_at[:19].replace('T', ' ') }} · mode: <code>{{ latest_run.mode }}</code> ·
+    {{ latest_run.input_row_count }} input rows · {{ latest_run.total_entities }} entities
+  </p>
+  <div class="stats-grid">
+    <div class="stat stat-ok">
+      <div class="stat-num">{{ latest_run.counts.resolved }}</div>
+      <div class="stat-label">Resolved</div>
+    </div>
+    <div class="stat stat-warn">
+      <div class="stat-num">{{ latest_run.counts.needs_review }}</div>
+      <div class="stat-label">Needs review</div>
+    </div>
+    <div class="stat stat-muted">
+      <div class="stat-num">{{ latest_run.counts.skipped }}</div>
+      <div class="stat-label">Skipped</div>
+    </div>
+    <div class="stat stat-bad">
+      <div class="stat-num">{{ latest_run.counts.failures }}</div>
+      <div class="stat-label">Failures</div>
+    </div>
+  </div>
+  <div class="cta-row">
+    <a class="btn btn-secondary" href="{{ url_for('results_page') }}">View results</a>
+    {% if latest_run.counts.needs_review > 0 %}
+    <a class="btn btn-primary" href="{{ url_for('review_page') }}">Review {{ latest_run.counts.needs_review }} ambiguous</a>
+    {% endif %}
+  </div>
+</section>
+{% endif %}
+
+<section class="card">
+  <h2>How it works</h2>
+  <ol class="numbered">
+    <li><strong>Export your Netflix history</strong> from <a href="https://www.netflix.com/viewingactivity" target="_blank" rel="noopener">netflix.com/viewingactivity</a> — click "Download all" at the bottom.</li>
+    <li><strong>Connect Trakt</strong> in Settings (one-time OAuth). Optional in stub mode.</li>
+    <li><strong>Upload the CSV</strong> and let the matcher run.</li>
+    <li><strong>Review fuzzy matches</strong> visually — pick the right TMDb candidate from posters and metadata.</li>
+    <li><strong>Sync</strong> with one click. Dry-run first if you're nervous.</li>
+  </ol>
+</section>
+
+{% endblock %}

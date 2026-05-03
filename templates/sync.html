@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Sync · netflix2trakt{% endblock %}
+{% block content %}
+
+<h1>Sync to Trakt</h1>
+
+<section class="card">
+  <h2>What will be sent</h2>
+  <div class="stats-grid">
+    <div class="stat stat-ok"><div class="stat-num">{{ summary.movies }}</div><div class="stat-label">Movies</div></div>
+    <div class="stat stat-ok"><div class="stat-num">{{ summary.shows }}</div><div class="stat-label">Shows</div></div>
+    <div class="stat stat-muted"><div class="stat-num">{{ picks_count }}</div><div class="stat-label">From your picks</div></div>
+  </div>
+  <p class="muted small">Combines auto-resolved matches (confidence ≥ 0.95) plus the candidates you accepted on the review page.</p>
+</section>
+
+<section class="card">
+  <h2>Run it</h2>
+  {% if not trakt_status.connected %}
+    <div class="flash flash-warning">
+      You're not connected to Trakt. Connect first if you want to push for real (you can still preview in dry-run).
+      <a href="{{ url_for('settings_page') }}">Settings</a>
+    </div>
+  {% endif %}
+
+  <form method="post">
+    {% if run_id %}<input type="hidden" name="run_id" value="{{ run_id }}">{% endif %}
+    <label class="checkbox-row">
+      <input type="checkbox" name="dry_run" checked>
+      <span><strong>Dry run</strong> — preview what would be sent without actually pushing.</span>
+    </label>
+    <p class="muted small">Uncheck to push for real (only allowed when connected to Trakt).</p>
+    <div class="cta-row">
+      <button class="btn btn-primary" type="submit">Sync</button>
+    </div>
+  </form>
+</section>
+
+{% endblock %}

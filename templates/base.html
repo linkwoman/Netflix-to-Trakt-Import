@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}netflix2trakt{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <div class="container nav">
+      <a class="brand" href="{{ url_for('index') }}">
+        <span class="logo-dot"></span> netflix2trakt
+      </a>
+      <nav>
+        <a href="{{ url_for('upload_page') }}">Import</a>
+        <a href="{{ url_for('results_page') }}">Results</a>
+        <a href="{{ url_for('review_page') }}">Review</a>
+        <a href="{{ url_for('history_page') }}">History</a>
+        <a href="{{ url_for('settings_page') }}">Settings</a>
+      </nav>
+      <div class="status-pills">
+        {% if tmdb_mode == 'stub' %}
+          <span class="pill pill-stub" title="Using local fixtures, no real API calls">stub mode</span>
+        {% else %}
+          <span class="pill pill-live">live mode</span>
+        {% endif %}
+        {% if trakt_status.connected %}
+          <span class="pill pill-ok">Trakt: {{ trakt_status.username or 'connected' }}</span>
+        {% else %}
+          <span class="pill pill-off">Trakt: not connected</span>
+        {% endif %}
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash-stack">
+          {% for cat, msg in messages %}
+            <div class="flash flash-{{ cat }}">{{ msg }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <span>netflix2trakt · runs locally · your data stays on your machine</span>
+    </div>
+  </footer>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

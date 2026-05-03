@@ -7,7 +7,7 @@ REVIEW_THRESHOLD = 0.95
 COLUMNS = [
     "source_file", "review_reason", "original_row_id", "original_confidence",
     "input_title", "input_type", "confidence", "candidate_confidence", "status",
-    "tmdb_id", "media_type", "tmdb_url",
+    "tmdb_id", "media_type", "tmdb_url", "candidate_title",
     "title_similarity", "popularity", "popularity_bonus", "vote_count", "vote_count_bonus",
     "year", "genres", "stars", "released_by", "vision_by_label", "vision_by", "poster_path",
     "candidate_rank", "candidate_ids", "data_source",
@@ -43,6 +43,7 @@ def _enrich(client, media_type, tmdb_id, cache):
         data = {}
 
     if media_type == "movie":
+        candidate_title = data.get("title") or data.get("original_title") or ""
         year = (data.get("release_date") or "")[:4]
         released_by = " | ".join(
             c.get("name", "") for c in (data.get("production_companies") or [])[:2]
@@ -55,6 +56,7 @@ def _enrich(client, media_type, tmdb_id, cache):
         ]
         vision_by = ", ".join(directors[:2])
     else:
+        candidate_title = data.get("name") or data.get("original_name") or ""
         year = (data.get("first_air_date") or "")[:4]
         released_by = " | ".join(
             n.get("name", "") for n in (data.get("networks") or [])[:1]
@@ -69,6 +71,7 @@ def _enrich(client, media_type, tmdb_id, cache):
     poster_path = data.get("poster_path", "")
 
     result = {
+        "candidate_title": candidate_title,
         "year": year,
         "genres": genres,
         "stars": stars,
@@ -116,6 +119,7 @@ def generate_review_queue(client, output_dir="."):
                     "tmdb_id": tmdb_id,
                     "media_type": media_type,
                     "tmdb_url": _build_tmdb_url(media_type, tmdb_id),
+                    "candidate_title": enrichment.get("candidate_title", ""),
                     "title_similarity": row.get("title_similarity", ""),
                     "popularity": row.get("popularity", ""),
                     "popularity_bonus": row.get("popularity_bonus", ""),
@@ -154,6 +158,7 @@ def generate_review_queue(client, output_dir="."):
                     "tmdb_id": "",
                     "media_type": media_type,
                     "tmdb_url": "",
+                    "candidate_title": "",
                     "title_similarity": "",
                     "popularity": "",
                     "popularity_bonus": "",
@@ -214,6 +219,7 @@ def generate_review_queue(client, output_dir="."):
                         "tmdb_id": cid,
                         "media_type": media_type,
                         "tmdb_url": _build_tmdb_url(media_type, cid),
+                        "candidate_title": enrichment.get("candidate_title", ""),
                         "title_similarity": ts_list[idx] if idx < len(ts_list) else "",
                         "popularity": pop_list[idx] if idx < len(pop_list) else "",
                         "popularity_bonus": pop_bonus_list[idx] if idx < len(pop_bonus_list) else "",

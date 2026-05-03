@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Processing · netflix2trakt{% endblock %}
+{% block content %}
+
+<h1>Processing your import</h1>
+
+<section class="card">
+  <div id="progress-stage" class="muted small">Starting…</div>
+  <h3 id="progress-message">Initializing…</h3>
+  <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width: 0%"></div></div>
+  <div class="muted small mt-1" id="progress-counts">0 / 0</div>
+
+  <div id="error-box" class="flash flash-error" hidden></div>
+</section>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const jobId = {{ job_id|tojson }};
+  const stageEl = document.getElementById('progress-stage');
+  const msgEl = document.getElementById('progress-message');
+  const fillEl = document.getElementById('progress-fill');
+  const countsEl = document.getElementById('progress-counts');
+  const errorEl = document.getElementById('error-box');
+
+  function poll() {
+    fetch(`/api/jobs/${jobId}`).then(r => r.json()).then(j => {
+      if (j.error) {
+        errorEl.hidden = false;
+        errorEl.textContent = j.error;
+        return;
+      }
+      stageEl.textContent = j.stage;
+      msgEl.textContent = j.message || j.stage;
+      const cur = j.progress_current || 0;
+      const tot = j.progress_total || 1;
+      const pct = Math.min(100, Math.round((cur / tot) * 100));
+      fillEl.style.width = pct + '%';
+      countsEl.textContent = `${cur} / ${tot}`;
+
+      if (j.stage === 'done') {
+        window.location = "{{ url_for('results_page') }}";
+        return;
+      }
+      if (j.stage === 'error') {
+        errorEl.hidden = false;
+        errorEl.textContent = j.error || j.message || 'Pipeline failed.';
+        return;
+      }
+      setTimeout(poll, 600);
+    }).catch(err => {
+      setTimeout(poll, 1500);
+    });
+  }
+  poll();
+</script>
+{% endblock %}
