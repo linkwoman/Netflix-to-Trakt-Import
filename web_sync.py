@@ -234,16 +234,23 @@ def sync_to_trakt(run_id, run_dir, client_id, dry_run=True, page_size=DEFAULT_PA
     }
 
     total_added = {"movies": 0, "episodes": 0, "shows": 0}
+    total_not_found = {"movies": 0, "episodes": 0, "shows": 0}
     chunks_sent = 0
+    last_response = None
     for chunk in _chunk_payload(payload, page_size):
         if not chunk:
             continue
         resp = requests.post(SYNC_URL, json=chunk, headers=headers, timeout=120)
         resp.raise_for_status()
         body = resp.json()
+        last_response = body
         added = body.get("added", {}) or {}
+        not_found = body.get("not_found", {}) or {}
         for k in total_added:
             total_added[k] += int(added.get(k, 0) or 0)
+            nf = not_found.get(k)
+            if isinstance(nf, list):
+                total_not_found[k] += len(nf)
         chunks_sent += 1
         logging.info(
             f"Trakt sync chunk {chunks_sent}: added {added}, "
@@ -255,4 +262,11 @@ def sync_to_trakt(run_id, run_dir, client_id, dry_run=True, page_size=DEFAULT_PA
         "summary": summary,
         "chunks_sent": chunks_sent,
         "added": total_added,
+        "not_found_counts": total_not_found,
+        "trakt_response": {
+            "added": total_added,
+            "not_found_counts": total_not_found,
+            "chunks_sent": chunks_sent,
+            "last_chunk_response": last_response,
+        },
     }

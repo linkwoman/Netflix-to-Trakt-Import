@@ -12,7 +12,7 @@
     <div class="stat stat-ok"><div class="stat-num">{{ summary.shows }}</div><div class="stat-label">Show entries</div></div>
     <div class="stat stat-muted"><div class="stat-num">{{ picks_count }}</div><div class="stat-label">From your picks</div></div>
   </div>
-  <p class="muted small">Each entry carries the original Netflix watch date as <code>watched_at</code>. Episodes come from auto-resolved shows; "show entries" are a fallback used when you picked a different TMDb show than the one the pipeline mapped episodes against (no episode-level data for that pick).</p>
+  <p class="muted small">Each entry carries the original Netflix watch date as <code>watched_at</code>. Episodes come from auto-resolved shows; "show entries" are a fallback used when you picked a different TMDb show than the one the pipeline mapped episodes against, or when no per-episode mapping was available.</p>
   {% if summary.show_fallback_count %}
   <p class="muted small">⚠ {{ summary.show_fallback_count }} show(s) will be sent at show-level only — either because your pick differs from the auto-mapped TMDb id, or no per-episode TMDb mapping was available for this show.</p>
   {% endif %}

@@ -508,7 +508,7 @@ def generate_run_summary(
         f"Processed {input_row_count} Netflix viewing history rows from '{input_file}' "
         f"in {'stub' if tmdb_mode == 'stub' else 'real'} mode with "
         f"Trakt dry-run {'enabled' if trakt_dry_run else 'disabled'}. "
-        f"The matcher auto-resolved {resolved_n} items at confidence >= 0.95, "
+        f"The matcher auto-resolved {resolved_n} items at confidence >= {CONFIDENCE_AUTO_ACCEPT}, "
         f"flagged {needs_review_n} items for human review due to ambiguity or lower confidence, "
         f"and skipped {skipped_n} items with no viable TMDb candidates. "
         f"{failures_n} rows failed due to parsing or enrichment errors"
@@ -538,7 +538,7 @@ def generate_run_summary(
         lines.append(sampling_line)
     lines += [
         "- Outputs:",
-        f"  - resolved.csv: {resolved_n} rows (confidence >= 0.95)",
+        f"  - resolved.csv: {resolved_n} rows (confidence >= {CONFIDENCE_AUTO_ACCEPT})",
         f"  - needs_review.csv: {needs_review_n} rows",
         f"  - skipped.csv: {skipped_n} rows",
         f"  - failures.csv: {failures_n} rows",
