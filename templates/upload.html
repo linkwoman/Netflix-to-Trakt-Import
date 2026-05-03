@@ -8,17 +8,21 @@
   <p class="muted">Drop your Netflix viewing history CSV. We'll match every title against TMDb and route each one to resolved / needs-review / skipped.</p>
 
   <form method="post" enctype="multipart/form-data" id="upload-form">
-    <div class="dropzone" id="dropzone">
-      <input type="file" name="csv_file" id="csv_file" accept=".csv" required hidden>
+    <label class="dropzone" id="dropzone" for="csv_file">
+      <input type="file" name="csv_file" id="csv_file" accept=".csv,text/csv" required>
       <div class="dz-inner">
         <div class="dz-icon">📥</div>
         <div class="dz-text">
-          <strong>Drop your NetflixViewingHistory.csv here</strong>
-          <span class="muted small">or click to browse</span>
+          <strong>Choose your NetflixViewingHistory.csv</strong>
+          <span class="muted small">click anywhere here to browse, or drop a file</span>
         </div>
       </div>
       <div class="dz-file" id="dz-file" hidden></div>
-    </div>
+    </label>
+
+    <p class="muted small" style="margin-top:8px;">
+      No file? Try the bundled sample: <code>fixtures/sample_viewing_history.csv</code>
+    </p>
 
     <h3>Matching mode</h3>
     <div class="field-row">
@@ -33,7 +37,7 @@
     </div>
 
     <div class="cta-row">
-      <button class="btn btn-primary" type="submit" id="submit-btn" disabled>Start import</button>
+      <button class="btn btn-primary" type="submit" id="submit-btn">Start import</button>
     </div>
   </form>
 </section>
@@ -45,17 +49,12 @@
   const dz = document.getElementById('dropzone');
   const input = document.getElementById('csv_file');
   const dzFile = document.getElementById('dz-file');
-  const submitBtn = document.getElementById('submit-btn');
 
   function showFile(file) {
     dzFile.hidden = false;
     dzFile.innerHTML = `<strong>${file.name}</strong> <span class="muted small">${(file.size/1024).toFixed(1)} KB</span>`;
-    submitBtn.disabled = false;
   }
 
-  dz.addEventListener('click', (e) => {
-    if (e.target === dz || e.target.closest('.dz-inner')) input.click();
-  });
   input.addEventListener('change', () => {
     if (input.files[0]) showFile(input.files[0]);
   });

@@ -159,11 +159,16 @@ main { flex: 1; padding: 32px 0 64px; }
 
 /* Dropzone */
 .dropzone {
+  position: relative; display: block;
   border: 2px dashed var(--border); border-radius: var(--radius);
   padding: 40px 20px; text-align: center; cursor: pointer;
   transition: all 0.15s; background: var(--surface);
 }
 .dropzone:hover, .dropzone.is-drag { border-color: var(--primary); background: #fff5f5; }
+.dropzone input[type=file] {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  opacity: 0; cursor: pointer;
+}
 .dz-inner { display: flex; flex-direction: column; gap: 12px; align-items: center; }
 .dz-icon { font-size: 40px; }
 .dz-text { display: flex; flex-direction: column; gap: 4px; }
