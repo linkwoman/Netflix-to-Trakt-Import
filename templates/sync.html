@@ -8,10 +8,17 @@
   <h2>What will be sent</h2>
   <div class="stats-grid">
     <div class="stat stat-ok"><div class="stat-num">{{ summary.movies }}</div><div class="stat-label">Movies</div></div>
-    <div class="stat stat-ok"><div class="stat-num">{{ summary.shows }}</div><div class="stat-label">Shows</div></div>
+    <div class="stat stat-ok"><div class="stat-num">{{ summary.episodes }}</div><div class="stat-label">Episodes</div></div>
+    <div class="stat stat-ok"><div class="stat-num">{{ summary.shows }}</div><div class="stat-label">Show entries</div></div>
     <div class="stat stat-muted"><div class="stat-num">{{ picks_count }}</div><div class="stat-label">From your picks</div></div>
   </div>
-  <p class="muted small">Combines auto-resolved matches (confidence ≥ 0.95) plus the candidates you accepted on the review page.</p>
+  <p class="muted small">Each entry carries the original Netflix watch date as <code>watched_at</code>. Episodes come from auto-resolved shows; "show entries" are a fallback used when you picked a different TMDb show than the one the pipeline mapped episodes against (no episode-level data for that pick).</p>
+  {% if summary.show_fallback_count %}
+  <p class="muted small">⚠ {{ summary.show_fallback_count }} show(s) will be sent at show-level only — either because your pick differs from the auto-mapped TMDb id, or no per-episode TMDb mapping was available for this show.</p>
+  {% endif %}
+  {% if summary.legacy %}
+  <p class="muted small">⚠ This run was created before episode-level sync was added — only show/movie ids will be sent, without watch dates. Re-run the import to get full episode-level sync.</p>
+  {% endif %}
 </section>
 
 <section class="card">

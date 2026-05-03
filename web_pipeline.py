@@ -132,26 +132,95 @@ def run_pipeline(
     data_source = "test" if mode == "stub" else "live"
     review_router = pipeline.ReviewRouter(data_source=data_source)
 
+    # sync_data captures per-entity TMDb mapping + watched_at timestamps so
+    # the web sync can push episode-level data with the original watch dates,
+    # matching what the CLI does. We collect this alongside the routing CSVs.
+    sync_data = {"shows": [], "movies": []}
+
+    def _last_assigned_row(router):
+        """Return (row_dict, status) for whichever bucket got the most recent
+        _assign_id() call, by comparing the highest original_row_id across
+        all four buckets. Returns (None, None) if no row was added."""
+        best_row, best_status, best_id = None, None, -1
+        for bucket, status in (
+            (router._resolved, "resolved"),
+            (router._needs_review, "needs_review"),
+            (router._skipped, "skipped"),
+            (router._failures, "failures"),
+        ):
+            for r in bucket:
+                rid = int(r.get("original_row_id") or 0)
+                if rid > best_id:
+                    best_id, best_row, best_status = rid, r, status
+        return best_row, best_status
+
     # Process shows
     total_steps = len(shows_to_process) + len(movies_to_process)
     step = 0
     for show in shows_to_process:
         step += 1
         report("matching", step, total_steps, f"Matching show: {show.name}")
+        before_row, _ = _last_assigned_row(review_router)
+        before_id = int(before_row["original_row_id"]) if before_row else 0
         try:
             pipeline.getShowInformation(show, client, False, trakt_io, review_router)
         except Exception as e:
             logging.error(f"Failed to process show '{show.name}': {e}")
             review_router.add_failure(show.name, "tv_show", str(e))
 
+        # Collect sync data for this show if it landed in resolved/needs_review.
+        row, status = _last_assigned_row(review_router)
+        if row and int(row["original_row_id"]) > before_id and status in ("resolved", "needs_review"):
+            if status == "resolved":
+                auto_tmdb_id = int(row["tmdb_id"]) if row.get("tmdb_id") else None
+            else:
+                ids = (row.get("candidate_ids") or "").split(";")
+                auto_tmdb_id = int(ids[0]) if ids and ids[0].strip() else None
+
+            episodes = []
+            all_watches = set()
+            for season in show.seasons:
+                for ep in season.episodes:
+                    for w in ep.watchedAt:
+                        all_watches.add(w)
+                    if ep.tmdbId is not None:
+                        for w in ep.watchedAt:
+                            episodes.append({"tmdb_id": ep.tmdbId, "watched_at": w})
+
+            sync_data["shows"].append({
+                "original_row_id": row["original_row_id"],
+                "name": show.name,
+                "auto_tmdb_id": auto_tmdb_id,
+                "auto_resolved": status == "resolved",
+                "episodes": episodes,
+                "show_watches": sorted(all_watches),
+            })
+
     for movie in movies_to_process:
         step += 1
         report("matching", step, total_steps, f"Matching movie: {movie.name}")
+        before_row, _ = _last_assigned_row(review_router)
+        before_id = int(before_row["original_row_id"]) if before_row else 0
         try:
             pipeline.getMovieInformation(movie, False, client, trakt_io, review_router)
         except Exception as e:
             logging.error(f"Failed to process movie '{movie.name}': {e}")
             review_router.add_failure(movie.name, "movie", str(e))
+
+        row, status = _last_assigned_row(review_router)
+        if row and int(row["original_row_id"]) > before_id and status in ("resolved", "needs_review"):
+            if status == "resolved":
+                auto_tmdb_id = int(row["tmdb_id"]) if row.get("tmdb_id") else None
+            else:
+                ids = (row.get("candidate_ids") or "").split(";")
+                auto_tmdb_id = int(ids[0]) if ids and ids[0].strip() else None
+            sync_data["movies"].append({
+                "original_row_id": row["original_row_id"],
+                "name": movie.name,
+                "auto_tmdb_id": auto_tmdb_id,
+                "auto_resolved": status == "resolved",
+                "watched_at": sorted(set(movie.watchedAt)),
+            })
 
     # Write routing CSVs
     report("routing", 1, 1, "Writing routing CSVs")
@@ -187,6 +256,11 @@ def run_pipeline(
     for name in OUTPUT_FILES:
         if os.path.exists(name):
             shutil.copy2(name, os.path.join(snapshot_dir, name))
+
+    # Persist sync_data.json so web_sync can rebuild the Trakt payload with
+    # episode-level mappings and watched_at timestamps.
+    with open(os.path.join(snapshot_dir, "sync_data.json"), "w") as f:
+        json.dump(sync_data, f, indent=2)
 
     # Save run metadata
     metadata = {

@@ -16,8 +16,10 @@
   <h2>Summary</h2>
   <div class="stats-grid">
     <div class="stat stat-ok"><div class="stat-num">{{ result.added.movies or 0 }}</div><div class="stat-label">Movies added</div></div>
-    <div class="stat stat-ok"><div class="stat-num">{{ result.added.shows or result.added.episodes or 0 }}</div><div class="stat-label">Shows / episodes added</div></div>
+    <div class="stat stat-ok"><div class="stat-num">{{ result.added.episodes or 0 }}</div><div class="stat-label">Episodes added</div></div>
+    <div class="stat stat-ok"><div class="stat-num">{{ result.added.shows or 0 }}</div><div class="stat-label">Show entries added</div></div>
   </div>
+  {% if result.chunks_sent %}<p class="muted small">Sent in {{ result.chunks_sent }} chunk(s) of up to 1000 items.</p>{% endif %}
 
   {% if result.trakt_response %}
   <h3>Trakt response</h3>
