@@ -2,7 +2,7 @@ import csv
 import logging
 import os
 
-REVIEW_THRESHOLD = 0.95
+REVIEW_THRESHOLD = 0.90
 
 COLUMNS = [
     "source_file", "review_reason", "original_row_id", "original_confidence",

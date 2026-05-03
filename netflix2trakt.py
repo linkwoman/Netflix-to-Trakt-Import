@@ -21,7 +21,7 @@ from tmdb_client import create_tmdb_client, compute_confidence, compute_all_conf
 from review_queue import generate_review_queue
 
 
-CONFIDENCE_AUTO_ACCEPT = 0.95
+CONFIDENCE_AUTO_ACCEPT = 0.90
 CONFIDENCE_REVIEW = 0.40
 
 
