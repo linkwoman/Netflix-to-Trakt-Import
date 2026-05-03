@@ -22,6 +22,7 @@
         <th>Review</th>
         <th>Skipped</th>
         <th>Failures</th>
+        <th>Last synced</th>
         <th>Files</th>
       </tr>
     </thead>
@@ -36,6 +37,7 @@
         <td><strong class="text-warn">{{ r.counts.needs_review }}</strong></td>
         <td>{{ r.counts.skipped }}</td>
         <td><strong class="{% if r.counts.failures %}text-bad{% endif %}">{{ r.counts.failures }}</strong></td>
+        <td class="muted small">{% if r.last_synced_at %}{{ r.last_synced_at.replace('T', ' ') }}{% else %}—{% endif %}</td>
         <td class="downloads">
           <a href="{{ url_for('results_page', run_id=r.run_id) }}">view</a> ·
           <a href="{{ url_for('download_run_file', run_id=r.run_id, filename='resolved.csv') }}">resolved</a> ·

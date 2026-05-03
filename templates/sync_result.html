@@ -20,6 +20,10 @@
     <div class="stat stat-ok"><div class="stat-num">{{ result.added.shows or 0 }}</div><div class="stat-label">Show entries added</div></div>
   </div>
   {% if result.chunks_sent %}<p class="muted small">Sent in {{ result.chunks_sent }} chunk(s) of up to 1000 items.</p>{% endif %}
+  {% set saw = result.summary.skipped_already_watched %}
+  {% if result.summary.already_watched_checked and saw and (saw.movies + saw.episodes + saw.shows) %}
+  <p class="muted small">✓ Skipped {{ saw.movies }} movie(s), {{ saw.episodes }} episode(s), and {{ saw.shows }} show entry(ies) that were already on your Trakt watched library.</p>
+  {% endif %}
 
   {% if result.trakt_response %}
   <h3>Trakt response</h3>

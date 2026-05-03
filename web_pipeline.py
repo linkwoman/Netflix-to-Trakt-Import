@@ -185,7 +185,13 @@ def run_pipeline(
                         all_watches.add(w)
                     if ep.tmdbId is not None:
                         for w in ep.watchedAt:
-                            episodes.append({"tmdb_id": ep.tmdbId, "watched_at": w})
+                            episodes.append({
+                                "tmdb_id": ep.tmdbId,
+                                "watched_at": w,
+                                "season": season.number,
+                                "episode": ep.number,
+                                "show_tmdb_id": auto_tmdb_id,
+                            })
 
             sync_data["shows"].append({
                 "original_row_id": row["original_row_id"],

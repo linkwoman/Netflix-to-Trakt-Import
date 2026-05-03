@@ -18,7 +18,9 @@ Routes:
 """
 
 import csv
+import datetime
 import json
+import logging
 import os
 import re
 import secrets
@@ -466,6 +468,20 @@ def create_app():
                     client_id=settings["trakt_client_id"],
                     dry_run=dry_run,
                 )
+                # Stamp metadata.json on a successful real sync.
+                if not dry_run:
+                    try:
+                        meta_path = os.path.join(base, "metadata.json")
+                        meta = {}
+                        if os.path.exists(meta_path):
+                            with open(meta_path) as mf:
+                                meta = json.load(mf)
+                        meta["last_synced_at"] = datetime.datetime.now().isoformat(timespec="seconds")
+                        meta["last_sync_added"] = result.get("added")
+                        with open(meta_path, "w") as mf:
+                            json.dump(meta, mf, indent=2)
+                    except Exception as e:
+                        logging.warning(f"Could not update metadata.json with last_synced_at: {e}")
                 return render_template(
                     "sync_result.html", result=result, dry_run=dry_run, run_id=run_id,
                 )
@@ -473,20 +489,45 @@ def create_app():
                 flash(f"Sync failed: {e}", "error")
                 return redirect(url_for("sync_page", run_id=run_id))
 
-        # GET - preview
+        # GET - preview. If connected, also fetch the user's watched library
+        # so the preview accurately reflects what dedup will skip.
+        already_watched = None
+        watched_fetch_error = None
+        if ts["connected"]:
+            try:
+                already_watched = web_sync.fetch_already_watched(
+                    client_id=settings["trakt_client_id"]
+                )
+            except Exception as e:
+                watched_fetch_error = str(e)
+
         try:
-            payload, summary = web_sync.build_sync_payload(run_id=run_id, run_dir=base)
+            payload, summary = web_sync.build_sync_payload(
+                run_id=run_id, run_dir=base, already_watched=already_watched
+            )
         except Exception as e:
             flash(f"Couldn't build sync payload: {e}", "error")
             return redirect(url_for("results_page", run_id=run_id))
 
         picks = web_sync.load_picks(run_id)
+        # Pull last_synced_at from metadata if present.
+        last_synced_at = None
+        try:
+            meta_path = os.path.join(base, "metadata.json")
+            if os.path.exists(meta_path):
+                with open(meta_path) as mf:
+                    last_synced_at = json.load(mf).get("last_synced_at")
+        except Exception:
+            pass
+
         return render_template(
             "sync.html",
             summary=summary,
             picks_count=sum(1 for p in picks.values() if p.get("action") == "accept"),
             trakt_status=ts,
             run_id=run_id,
+            last_synced_at=last_synced_at,
+            watched_fetch_error=watched_fetch_error,
         )
 
     @app.route("/history")

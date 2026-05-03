@@ -5,6 +5,12 @@
 <h1>Sync to Trakt</h1>
 
 <section class="card">
+  {% if last_synced_at %}
+  <div class="flash flash-warning">
+    ⚠ This run was already synced on <strong>{{ last_synced_at.replace('T', ' ') }}</strong>. Re-syncing may add duplicate watch entries on Trakt for anything not already on your watched library — see the dedup count below.
+  </div>
+  {% endif %}
+
   <h2>What will be sent</h2>
   <div class="stats-grid">
     <div class="stat stat-ok"><div class="stat-num">{{ summary.movies }}</div><div class="stat-label">Movies</div></div>
@@ -12,6 +18,18 @@
     <div class="stat stat-ok"><div class="stat-num">{{ summary.shows }}</div><div class="stat-label">Show entries</div></div>
     <div class="stat stat-muted"><div class="stat-num">{{ picks_count }}</div><div class="stat-label">From your picks</div></div>
   </div>
+  {% if summary.already_watched_checked %}
+    {% set saw = summary.skipped_already_watched %}
+    {% if saw and (saw.movies + saw.episodes + saw.shows) %}
+    <p class="muted small">✓ Skipping {{ saw.movies }} movie watch(es), {{ saw.episodes }} episode(s), and {{ saw.shows }} show entry(ies) already on your Trakt watched library.</p>
+    {% else %}
+    <p class="muted small">✓ Checked your Trakt watched library — no overlap with this run.</p>
+    {% endif %}
+  {% elif watched_fetch_error %}
+    <p class="muted small">⚠ Couldn't fetch your Trakt watched library to dedupe ({{ watched_fetch_error }}). The sync will still proceed but may create duplicate entries.</p>
+  {% elif not trakt_status.connected %}
+    <p class="muted small">ℹ Connect to Trakt to dedupe against your existing watched library before sync.</p>
+  {% endif %}
   <p class="muted small">Each entry carries the original Netflix watch date as <code>watched_at</code>. Episodes come from auto-resolved shows; "show entries" are a fallback used when you picked a different TMDb show than the one the pipeline mapped episodes against, or when no per-episode mapping was available.</p>
   {% if summary.show_fallback_count %}
   <p class="muted small">⚠ {{ summary.show_fallback_count }} show(s) will be sent at show-level only — either because your pick differs from the auto-mapped TMDb id, or no per-episode TMDb mapping was available for this show.</p>

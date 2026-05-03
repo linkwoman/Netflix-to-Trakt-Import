@@ -15,7 +15,66 @@ import requests
 from web_oauth import load_authorization
 
 SYNC_URL = "https://api.trakt.tv/sync/history"
+WATCHED_SHOWS_URL = "https://api.trakt.tv/sync/watched/shows"
+WATCHED_MOVIES_URL = "https://api.trakt.tv/sync/watched/movies"
 DEFAULT_PAGE_SIZE = 1000
+
+
+def fetch_already_watched(client_id):
+    """Fetch the user's full Trakt watched library and return
+    (watched_episode_tmdb_ids, watched_movie_tmdb_ids) as int sets.
+
+    Returns (None, None) if the user isn't connected. Raises on API errors.
+    Two HTTP requests total (one for shows, one for movies). The shows
+    response is nested seasons -> episodes; we collect every episode tmdb id.
+    """
+    auth = load_authorization()
+    if not auth:
+        return None, None
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {auth['access_token']}",
+        "trakt-api-version": "2",
+        "trakt-api-key": client_id,
+    }
+
+    # Trakt's /sync/watched/shows doesn't expose per-episode TMDb ids, so
+    # we dedupe using (show_tmdb, season_number, episode_number) triples.
+    # Also collect a set of show_tmdb ids that have any watched episodes
+    # at all, so we can dedupe show-level fallback entries.
+    episode_triples = set()
+    show_ids_with_any_watched = set()
+    resp = requests.get(WATCHED_SHOWS_URL, headers=headers, timeout=60)
+    resp.raise_for_status()
+    for show in resp.json() or []:
+        show_tmdb = (show.get("show", {}).get("ids") or {}).get("tmdb")
+        if not show_tmdb:
+            continue
+        any_eps = False
+        for season in show.get("seasons") or []:
+            sn = season.get("number")
+            for ep in season.get("episodes") or []:
+                en = ep.get("number")
+                if sn is not None and en is not None:
+                    episode_triples.add((int(show_tmdb), int(sn), int(en)))
+                    any_eps = True
+        if any_eps:
+            show_ids_with_any_watched.add(int(show_tmdb))
+
+    movie_ids = set()
+    resp = requests.get(WATCHED_MOVIES_URL, headers=headers, timeout=60)
+    resp.raise_for_status()
+    for entry in resp.json() or []:
+        tmdb = (entry.get("movie", {}).get("ids") or {}).get("tmdb")
+        if tmdb:
+            movie_ids.add(int(tmdb))
+
+    return {
+        "episode_triples": episode_triples,
+        "show_ids_with_any_watched": show_ids_with_any_watched,
+        "movie_ids": movie_ids,
+    }
 
 
 def _picks_path(run_id):
@@ -96,7 +155,7 @@ def _build_legacy_payload(run_id, run_dir):
     return payload, summary
 
 
-def build_sync_payload(run_id, run_dir):
+def build_sync_payload(run_id, run_dir, already_watched=None):
     """Build the Trakt /sync/history payload from sync_data.json + picks.
 
     Movies: each watched_at gets its own movie history entry.
@@ -114,6 +173,11 @@ def build_sync_payload(run_id, run_dir):
     picks = load_picks(run_id)
     movies, episodes, shows = [], [], []
     show_fallback = 0
+    skipped_already_watched = {"movies": 0, "episodes": 0, "shows": 0}
+
+    aw_movies = (already_watched or {}).get("movie_ids") or set()
+    aw_eps = (already_watched or {}).get("episode_triples") or set()
+    aw_shows = (already_watched or {}).get("show_ids_with_any_watched") or set()
 
     for m in sync_data.get("movies", []):
         rid = str(m["original_row_id"])
@@ -130,6 +194,9 @@ def build_sync_payload(run_id, run_dir):
         else:
             continue
         if not tmdb_id:
+            continue
+        if tmdb_id in aw_movies:
+            skipped_already_watched["movies"] += len(m.get("watched_at") or [])
             continue
         for w in m.get("watched_at") or []:
             movies.append({"watched_at": w, "ids": {"tmdb": tmdb_id}})
@@ -155,6 +222,12 @@ def build_sync_payload(run_id, run_dir):
         eps = s.get("episodes") or []
         if auto_id and picked == auto_id and eps:
             for ep in eps:
+                triple = None
+                if ep.get("show_tmdb_id") and ep.get("season") is not None and ep.get("episode") is not None:
+                    triple = (int(ep["show_tmdb_id"]), int(ep["season"]), int(ep["episode"]))
+                if triple is not None and triple in aw_eps:
+                    skipped_already_watched["episodes"] += 1
+                    continue
                 episodes.append(
                     {"watched_at": ep["watched_at"], "ids": {"tmdb": ep["tmdb_id"]}}
                 )
@@ -163,6 +236,9 @@ def build_sync_payload(run_id, run_dir):
             # or no episode mapping was available. Send show-level entries
             # with each unique watched_at as a best-effort fallback.
             show_fallback += 1
+            if picked in aw_shows:
+                skipped_already_watched["shows"] += len(s.get("show_watches") or [])
+                continue
             for w in s.get("show_watches") or []:
                 shows.append({"watched_at": w, "ids": {"tmdb": picked}})
 
@@ -180,6 +256,8 @@ def build_sync_payload(run_id, run_dir):
         "shows": len(shows),
         "show_fallback_count": show_fallback,
         "legacy": False,
+        "skipped_already_watched": skipped_already_watched,
+        "already_watched_checked": already_watched is not None,
     }
     return payload, summary
 
@@ -199,10 +277,24 @@ def _chunk_payload(payload, page_size):
         yield chunk
 
 
-def sync_to_trakt(run_id, run_dir, client_id, dry_run=True, page_size=DEFAULT_PAGE_SIZE):
+def sync_to_trakt(run_id, run_dir, client_id, dry_run=True, page_size=DEFAULT_PAGE_SIZE, already_watched=None):
     """POST the built payload to Trakt /sync/history (chunked). Returns a
-    dict describing what was sent / added."""
-    payload, summary = build_sync_payload(run_id=run_id, run_dir=run_dir)
+    dict describing what was sent / added.
+
+    If `already_watched` is None and we have a Trakt connection, we fetch the
+    user's watched library and dedupe against it. Pass an explicit value (incl.
+    `{}`) to skip or override that lookup.
+    """
+    if already_watched is None:
+        try:
+            already_watched = fetch_already_watched(client_id)
+        except Exception as e:
+            logging.warning(f"Could not fetch Trakt watched library for dedup: {e}")
+            already_watched = None
+
+    payload, summary = build_sync_payload(
+        run_id=run_id, run_dir=run_dir, already_watched=already_watched
+    )
 
     if dry_run:
         logging.info(f"[DRY RUN] Would sync to Trakt: {summary}")
